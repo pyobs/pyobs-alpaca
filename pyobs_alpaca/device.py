@@ -74,7 +74,7 @@ class AlpacaDevice:
         url = self._build_alpaca_url(name)
 
         # request it
-        res = self._session.get(url)
+        res = self._session.get(url, timeout=10)
         if res.status_code != 200:
             raise ValueError('Could not contact server.')
         response = ServerGetResponse(**res.json())
@@ -98,7 +98,7 @@ class AlpacaDevice:
         url = self._build_alpaca_url(name)
 
         # request it
-        res = self._session.put(url, data=values)
+        res = self._session.put(url, data=values, timeout=10)
         if res.status_code != 200:
             raise ValueError('Could not contact server.')
         response = ServerPutResponse(**res.json())
