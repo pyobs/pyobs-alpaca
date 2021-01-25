@@ -3,6 +3,8 @@ import threading
 from astropy.coordinates import SkyCoord, ICRS
 from astropy import units as u
 import numpy as np
+from requests import ConnectTimeout
+
 from pyobs.mixins import FitsNamespaceMixin
 
 from pyobs.interfaces import IFitsHeaderProvider, IMotion, IRaDecOffsets, ISyncTarget
@@ -43,14 +45,18 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         BaseTelescope.open(self)
 
         # initial status
-        if self.get('AtPark'):
-            self._change_motion_status(IMotion.Status.PARKED)
-        if self.get('Slewing'):
-            self._change_motion_status(IMotion.Status.SLEWING)
-        if self.get('Tracking'):
-            self._change_motion_status(IMotion.Status.TRACKING)
-        else:
-            self._change_motion_status(IMotion.Status.IDLE)
+        try:
+            if self.get('AtPark'):
+                self._change_motion_status(IMotion.Status.PARKED)
+            if self.get('Slewing'):
+                self._change_motion_status(IMotion.Status.SLEWING)
+            if self.get('Tracking'):
+                self._change_motion_status(IMotion.Status.TRACKING)
+            else:
+                self._change_motion_status(IMotion.Status.IDLE)
+        except (ValueError, ConnectTimeout):
+            log.error('Could not fetch initial status from telescope.')
+            self._change_motion_status(IMotion.Status.UNKNOWN)
 
     @timeout(60000)
     def init(self, *args, **kwargs):
@@ -62,12 +68,20 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # acquire lock
         with LockWithAbort(self._lock_moving, self._abort_move):
-            # park telescope
+            # change status
             log.info('Initializing telescope...')
             self._change_motion_status(IMotion.Status.INITIALIZING)
-            self._move_altaz(30, 0, self._abort_move)
-            self._change_motion_status(IMotion.Status.IDLE)
-            log.info('Telescope initialized.')
+
+            # move to init position
+            try:
+                self._move_altaz(30, 0, self._abort_move)
+                self._change_motion_status(IMotion.Status.IDLE)
+                log.info('Telescope initialized.')
+
+            except (ValueError, ConnectTimeout):
+                self._change_motion_status(IMotion.Status.UNKNOWN)
+                raise ValueError('Could not init telescope.')
+
 
     @timeout(60000)
     def park(self, *args, **kwargs):
@@ -79,12 +93,19 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # acquire lock
         with LockWithAbort(self._lock_moving, self._abort_move):
-            # park telescope
+            # change status
             log.info('Parking telescope...')
             self._change_motion_status(IMotion.Status.PARKING)
-            self.put('Park')
-            self._change_motion_status(IMotion.Status.PARKED)
-            log.info('Telescope parked.')
+
+            # park telescope
+            try:
+                self.put('Park')
+                self._change_motion_status(IMotion.Status.PARKED)
+                log.info('Telescope parked.')
+
+            except (ValueError, ConnectTimeout):
+                self._change_motion_status(IMotion.Status.UNKNOWN)
+                raise ValueError('Could not park telescope.')
 
     def _move_altaz(self, alt: float, az: float, abort_event: threading.Event):
         """Actually moves to given coordinates. Must be implemented by derived classes.
@@ -106,17 +127,22 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         if az > 360:
             az -= 360
 
-        # start slewing
-        self.put('Tracking', Tracking=False)
-        self.put('SlewToAltAzAsync', Azimuth=az, Altitude=alt)
+        try:
+            # start slewing
+            self.put('Tracking', Tracking=False)
+            self.put('SlewToAltAzAsync', Azimuth=az, Altitude=alt)
 
-        # wait for it
-        while self.get('Slewing'):
-            abort_event.wait(1)
-        self.put('Tracking', Tracking=False)
+            # wait for it
+            while self.get('Slewing'):
+                abort_event.wait(1)
+            self.put('Tracking', Tracking=False)
 
-        # wait settle time
-        abort_event.wait(self._settle_time)
+            # wait settle time
+            abort_event.wait(self._settle_time)
+
+        except (ValueError, ConnectTimeout):
+            self._change_motion_status(IMotion.Status.UNKNOWN)
+            raise ValueError('Could not move telescope to Alt/Az.')
 
     def _move_radec(self, ra: float, dec: float, abort_event: threading.Event):
         """Actually starts tracking on given coordinates. Must be implemented by derived classes.
@@ -136,17 +162,22 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         # to skycoords
         ra_dec = SkyCoord(ra * u.deg, dec * u.deg, frame=ICRS)
 
-        # start slewing
-        self.put('Tracking', Tracking=True)
-        self.put('SlewToCoordinatesAsync', RightAscension=ra / 15., Declination=dec)
+        try:
+            # start slewing
+            self.put('Tracking', Tracking=True)
+            self.put('SlewToCoordinatesAsync', RightAscension=ra / 15., Declination=dec)
 
-        # wait for it
-        while self.get('Slewing'):
-            abort_event.wait(1)
-        self.put('Tracking', Tracking=True)
+            # wait for it
+            while self.get('Slewing'):
+                abort_event.wait(1)
+            self.put('Tracking', Tracking=True)
 
-        # wait settle time
-        abort_event.wait(self._settle_time)
+            # wait settle time
+            abort_event.wait(self._settle_time)
+
+        except (ValueError, ConnectTimeout):
+            self._change_motion_status(IMotion.Status.UNKNOWN)
+            raise ValueError('Could not move telescope to RA/Dec.')
 
     @timeout(10000)
     def set_radec_offsets(self, dra: float, ddec: float, *args, **kwargs):

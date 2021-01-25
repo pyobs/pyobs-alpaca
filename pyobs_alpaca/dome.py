@@ -209,7 +209,11 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
         # loop forever
         while not self.closing.is_set():
             # get azimuth
-            self._azimuth = self.get('Azimuth')
+            try:
+                self._azimuth = self.get('Azimuth')
+            except (ValueError, TimeoutError):
+                # ignore it
+                pass
 
             # sleep a little
             self.closing.wait(2)
