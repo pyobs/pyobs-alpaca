@@ -65,7 +65,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             # park telescope
             log.info('Initializing telescope...')
             self._change_motion_status(IMotion.Status.INITIALIZING)
-            self._move_altaz(30, 180, self._abort_move)
+            self._move_altaz(30, 0, self._abort_move)
             self._change_motion_status(IMotion.Status.IDLE)
             log.info('Telescope initialized.')
 
