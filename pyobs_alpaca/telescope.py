@@ -210,7 +210,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
             # start slewing
             self.put('Tracking', Tracking=True)
-            self.put('SlewToCoordinatesAsync', Azimuth=ra / 15., Altitude=dec)
+            self.put('SlewToCoordinatesAsync', RightAscension=ra / 15., Declination=dec)
 
             # wait for it
             while self.get('Slewing'):
