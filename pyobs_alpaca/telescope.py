@@ -320,7 +320,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         hdr['DECOFF'] = (dec_off, 'Dec offset [deg]')
 
         # return it
-        return self._filter_fits_namespace(hdr, namespaces, **kwargs)
+        return self._filter_fits_namespace(hdr, namespaces=namespaces, **kwargs)
 
 
 __all__ = ['AlpacaTelescope']
