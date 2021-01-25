@@ -123,9 +123,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         self._offset_ra, self._offset_dec = 0, 0
 
         # correct azimuth by 180 degrees
-        az += 180
-        if az > 360:
-            az -= 360
+        #az += 180
+        #if az > 360:
+        #    az -= 360
 
         try:
             # start slewing
@@ -261,9 +261,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         try:
             # correct azimuth by 180 degrees
-            az = self.get('Azimuth') + 180
-            if az > 360:
-                az -= 360
+            az = self.get('Azimuth')
+            #if az > 360:
+            #    az -= 360
 
             # create sky coordinates
             return self.get('Altitude'), self.get('Azimuth')
