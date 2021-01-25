@@ -75,6 +75,19 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
             # execute command
             self.put('OpenShutter')
 
+            # wait for it
+            status = None
+            while status != 0:
+                # error?
+                if status == 4:
+                    log.error('Could not open dome.')
+                    self._change_motion_status(IMotion.Status.UNKNOWN)
+                    return
+
+                # wait a little and update
+                self._abort_shutter.wait(1)
+                status = self.get('ShutterStatus')
+
             # set new status
             log.info('Dome opened.')
             self._change_motion_status(IMotion.Status.POSITIONED)
@@ -97,6 +110,19 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
 
             # send command for closing shutter
             self.put('CloseShutter')
+
+            # wait for it
+            status = None
+            while status != 1:
+                # error?
+                if status == 4:
+                    log.error('Could not close dome.')
+                    self._change_motion_status(IMotion.Status.UNKNOWN)
+                    return
+
+                # wait a little and update
+                self._abort_shutter.wait(1)
+                status = self.get('ShutterStatus')
 
             # set new status
             log.info('Dome closed.')
