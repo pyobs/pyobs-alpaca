@@ -2,6 +2,8 @@ import logging
 import threading
 from typing import Tuple
 
+from requests import ConnectTimeout
+
 from pyobs.events import RoofOpenedEvent, RoofClosingEvent
 from pyobs.mixins import FollowMixin
 
@@ -211,7 +213,7 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
             # get azimuth
             try:
                 self._azimuth = self.get('Azimuth')
-            except (ValueError, TimeoutError):
+            except (ValueError, ConnectTimeout):
                 # ignore it
                 pass
 
