@@ -239,14 +239,18 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             Tuple of current RA and Dec in degrees.
         """
 
-        # get position
-        ra, dec = self.get('RightAscension'), self.get('Declination')
+        try:
+            # get position
+            ra, dec = self.get('RightAscension'), self.get('Declination')
 
-        # correct ra offset by decl
-        ra_off = self._offset_ra / np.cos(np.radians(dec))
+            # correct ra offset by decl
+            ra_off = self._offset_ra / np.cos(np.radians(dec))
 
-        # return coordinates without offsets
-        return float(ra * 15 - ra_off), float(dec - self._offset_dec)
+            # return coordinates without offsets
+            return float(ra * 15 - ra_off), float(dec - self._offset_dec)
+
+        except (ValueError, ConnectTimeout):
+            raise ValueError('Could not fetch Alt/Az.')
 
     def get_altaz(self, *args, **kwargs) -> (float, float):
         """Returns current Alt and Az.
@@ -255,13 +259,17 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             Tuple of current Alt and Az in degrees.
         """
 
-        # correct azimuth by 180 degrees
-        az = self.get('Azimuth') + 180
-        if az > 360:
-            az -= 360
+        try:
+            # correct azimuth by 180 degrees
+            az = self.get('Azimuth') + 180
+            if az > 360:
+                az -= 360
 
-        # create sky coordinates
-        return self.get('Altitude'), self.get('Azimuth')
+            # create sky coordinates
+            return self.get('Altitude'), self.get('Azimuth')
+
+        except (ValueError, ConnectTimeout):
+            raise ValueError('Could not fetch Alt/Az.')
 
     def stop_motion(self, device: str = None, *args, **kwargs):
         """Stop the motion.
