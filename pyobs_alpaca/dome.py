@@ -108,8 +108,9 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
             self._change_motion_status(IMotion.Status.PARKING)
             self.comm.send_event(RoofClosingEvent())
 
-            # send command for closing shutter
+            # send command for closing shutter and rotate to South
             self.put('CloseShutter')
+            self.put('SlewToAzimuth', Azimuth=0)
 
             # wait for it
             status = None
