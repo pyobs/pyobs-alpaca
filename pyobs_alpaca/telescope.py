@@ -101,11 +101,6 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         # reset offsets
         self._offset_ra, self._offset_dec = 0, 0
 
-        # correct azimuth, Autoslew returns it as E of S (but slews to azimuth with E of N)... *sigh*
-        az += 180
-        if az > 360.:
-            az -= 360
-
         # start slewing
         self.put('Tracking', Tracking=False)
         self.put('SlewToAltAzAsync', Azimuth=az, Altitude=alt)
@@ -224,13 +219,8 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             Tuple of current Alt and Az in degrees.
         """
 
-        # correct azimuth, Autoslew returns it as E of S (but slews to azimuth with E of N)... *sigh*
-        az = self.get('Azimuth') + 180
-        if az > 360.:
-            az -= 360
-
         # create sky coordinates
-        return self.get('Altitude'), az
+        return self.get('Altitude'), self.get('Azimuth')
 
     def stop_motion(self, device: str = None, *args, **kwargs):
         """Stop the motion.
