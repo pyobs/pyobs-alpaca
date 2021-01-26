@@ -81,7 +81,7 @@ class AlpacaDevice(Object):
 
         # get new status
         try:
-            self._get('DriverVersion')
+            self._get('Connected')
             connected = True
         except (requests.ConnectionError, ConnectTimeoutError, ConnectionRefusedError):
             connected = False
