@@ -123,11 +123,15 @@ class AlpacaDevice(Object):
         # get url
         url = self._build_alpaca_url(name)
 
-        # request it
-        res = self._session.get(url, timeout=5)
-        if res.status_code != 200:
-            raise ValueError('Could not contact server.')
-        response = ServerGetResponse(**res.json())
+        try:
+            # request it
+            res = self._session.get(url, timeout=5)
+            if res.status_code != 200:
+                raise ValueError('Could not contact server.')
+            response = ServerGetResponse(**res.json())
+
+        except (ConnectTimeoutError, ConnectionRefusedError):
+            raise ValueError('Could not connect to server.')
 
         # check error
         if response.ErrorNumber != 0:
@@ -166,11 +170,15 @@ class AlpacaDevice(Object):
         # get url
         url = self._build_alpaca_url(name)
 
-        # request it
-        res = self._session.put(url, data=values, timeout=5)
-        if res.status_code != 200:
-            raise ValueError('Could not contact server.')
-        response = ServerPutResponse(**res.json())
+        try:
+            # request it
+            res = self._session.put(url, data=values, timeout=5)
+            if res.status_code != 200:
+                raise ValueError('Could not contact server.')
+            response = ServerPutResponse(**res.json())
+
+        except (ConnectTimeoutError, ConnectionRefusedError):
+            raise ValueError('Could not connect to server.')
 
         # check error
         if response.ErrorNumber != 0:
