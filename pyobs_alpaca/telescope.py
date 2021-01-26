@@ -87,6 +87,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # acquire lock
         with LockWithAbort(self._lock_moving, self._abort_move):
+            # not connected
+            if not self._device.connected:
+                raise ValueError('Not connected to ASCOM.')
+
             # change status
             log.info('Initializing telescope...')
             self._change_motion_status(IMotion.Status.INITIALIZING)
@@ -112,6 +116,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # acquire lock
         with LockWithAbort(self._lock_moving, self._abort_move):
+            # not connected
+            if not self._device.connected:
+                raise ValueError('Not connected to ASCOM.')
+
             # change status
             log.info('Parking telescope...')
             self._change_motion_status(IMotion.Status.PARKING)
@@ -204,6 +212,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # acquire lock
         with LockWithAbort(self._lock_moving, self._abort_move):
+            # not connected
+            if not self._device.connected:
+                raise ValueError('Not connected to ASCOM.')
+
             # start slewing
             self._change_motion_status(IMotion.Status.SLEWING)
             log.info('Setting telescope offsets to dRA=%.2f", dDec=%.2f"...', dra * 3600., ddec * 3600.)
