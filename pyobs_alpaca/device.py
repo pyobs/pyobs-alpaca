@@ -63,6 +63,7 @@ class AlpacaDevice(Object):
 
     def open(self):
         """Open device."""
+        Object.open(self)
 
         # check connected
         self._check_connected()
