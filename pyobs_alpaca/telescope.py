@@ -1,7 +1,5 @@
 import logging
 import threading
-from astropy.coordinates import SkyCoord, ICRS
-from astropy import units as u
 import numpy as np
 
 from pyobs.mixins import FitsNamespaceMixin
