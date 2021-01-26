@@ -86,7 +86,7 @@ class AlpacaDevice(Object):
         try:
             self._get(self._alive_param)
             connected = True
-        except (requests.ConnectionError, ConnectTimeoutError, ConnectionRefusedError):
+        except ValueError:
             connected = False
 
         # did it change?
