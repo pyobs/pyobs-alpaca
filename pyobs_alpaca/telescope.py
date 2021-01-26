@@ -47,31 +47,36 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         BaseTelescope.open(self)
 
         # initial status
-        if not self._check_status():
+        status = self._get_status()
+        if status == IMotion.Status.IDLE:
             log.error('Could not fetch initial status from telescope.')
+        self._change_motion_status(status)
 
-    def _check_status(self) -> bool:
-        """Check status of telescope."""
+    def _get_status(self) -> IMotion.Status:
+        """Get status of telescope."""
+
         try:
             if self._device.get('AtPark'):
-                self._change_motion_status(IMotion.Status.PARKED)
-            if self._device.get('Slewing'):
-                self._change_motion_status(IMotion.Status.SLEWING)
-            if self._device.get('Tracking'):
-                self._change_motion_status(IMotion.Status.TRACKING)
+                return IMotion.Status.PARKED
+            elif self._device.get('Slewing'):
+                return IMotion.Status.SLEWING
+            elif self._device.get('Tracking'):
+                return IMotion.Status.TRACKING
             else:
-                self._change_motion_status(IMotion.Status.IDLE)
-            return True
+                return IMotion.Status.IDLE
 
         except ValueError:
-            self._change_motion_status(IMotion.Status.UNKNOWN)
-            return False
+            return IMotion.Status.UNKNOWN
 
     def _check_status_thread(self):
         """Periodically check status of telescope."""
 
         while not self.closing.is_set():
-            self._check_status()
+            # only check, if status is unknown
+            if self.get_motion_status() == IMotion.Status.UNKNOWN:
+                self._change_motion_status(self._get_status())
+
+            # wait a little
             self.closing.wait(5)
 
     @timeout(60000)
