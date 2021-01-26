@@ -142,6 +142,10 @@ class AlpacaDevice(Object):
             values: Values to set.
         """
 
+        # only do it, if connected
+        if not self._connected:
+            raise ValueError('Not connected to ASCOM.')
+
         # get url
         url = self._build_alpaca_url(name)
 
