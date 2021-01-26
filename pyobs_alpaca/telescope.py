@@ -48,7 +48,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # initial status
         status = self._get_status()
-        if status == IMotion.Status.IDLE:
+        if status == IMotion.Status.UNKNOWN:
             log.error('Could not fetch initial status from telescope.')
         self._change_motion_status(status)
 
