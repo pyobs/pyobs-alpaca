@@ -75,11 +75,23 @@ class AlpacaDevice(Object):
 
     def _check_connected(self):
         """Check, whether we're connected to ASCOM"""
+
+        # get new status
         try:
             self._get('DriverVersion')
-            self._connected = True
+            connected = True
         except (requests.ConnectionError, ConnectTimeoutError, ConnectionRefusedError):
-            self._connected = False
+            connected = False
+
+        # did it change?
+        if connected != self._connected:
+            if connected:
+                log.info('Connected to ASCOM server.')
+            else:
+                log.warning('Lost connection to ASCOM server.')
+
+        # store new status
+        self._connected = connected
 
     def _build_alpaca_url(self, name: str) -> str:
         """Build URL for Alpaca server.
