@@ -1,7 +1,9 @@
 import logging
 from typing import Any, NamedTuple
 import requests
+from urllib3.exceptions import ConnectTimeoutError
 
+from pyobs.object import Object
 
 log = logging.getLogger('pyobs')
 
@@ -21,7 +23,7 @@ class ServerGetResponse(NamedTuple):
     Value: Any
 
 
-class AlpacaDevice:
+class AlpacaDevice(Object):
     def __init__(self, server: str = None, port: int = None, type: str = None, device: int = None, version: str = 'v1',
                  *args, **kwargs):
         """Initializes a new ASCOM Alpaca device.
@@ -33,6 +35,7 @@ class AlpacaDevice:
             device: Device number.
             version: Alpaca version.
         """
+        Object.__init__(self, *args, **kwargs)
 
         # variables
         self._alpaca_server = server
@@ -41,12 +44,42 @@ class AlpacaDevice:
         self._alpaca_device = device
         self._alpaca_version = version
 
+        # do we have a connection to the ASCOM Remote server?
+        self._connected = False
+
+        # add thread
+        self._add_thread_func(self._check_connected_thread)
+
         # check version
         if version != 'v1':
             raise ValueError('Only Alpaca v1 is supported.')
 
         # create session
         self._session = requests.session()
+
+    @property
+    def connected(self):
+        return self._connected
+
+    def open(self):
+        """Open device."""
+
+        # check connected
+        self._check_connected()
+
+    def _check_connected_thread(self):
+        """Periodically check, whether we're connected to ASCOM."""
+        while not self.closing.is_set():
+            self._check_connected()
+            self.closing.wait(5)
+
+    def _check_connected(self):
+        """Check, whether we're connected to ASCOM"""
+        try:
+            self._get('DriverVersion')
+            self._connected = True
+        except (requests.ConnectionError, ConnectTimeoutError, ConnectionRefusedError):
+            self._connected = False
 
     def _build_alpaca_url(self, name: str) -> str:
         """Build URL for Alpaca server.
@@ -60,7 +93,7 @@ class AlpacaDevice:
         return 'http://%s:%d/api/%s/%s/%d/%s' % (self._alpaca_server, self._alpaca_port, self._alpaca_version,
                                                  self._alpaca_type, self._alpaca_device, name.lower())
 
-    def get(self, name: str) -> Any:
+    def _get(self, name: str) -> Any:
         """Calls GET on Alpaca server, which returns value for variable with given name.
 
         Args:
@@ -74,7 +107,7 @@ class AlpacaDevice:
         url = self._build_alpaca_url(name)
 
         # request it
-        res = self._session.get(url, timeout=10)
+        res = self._session.get(url, timeout=5)
         if res.status_code != 200:
             raise ValueError('Could not contact server.')
         response = ServerGetResponse(**res.json())
@@ -85,6 +118,21 @@ class AlpacaDevice:
 
         # return value
         return response.Value
+
+    def get(self, name: str) -> Any:
+        """Calls GET on Alpaca server, which returns value for variable with given name.
+
+        Args:
+            name: Name of variable.
+
+        Returns:
+            Value of variable.
+        """
+
+        # only do it, if connected
+        if not self._connected:
+            raise ValueError('Not connected to ASCOM.')
+        return self._get(name)
 
     def put(self, name: str, **values):
         """Calls PUT on Alpaca server with given variable, which might set a variable or call a method.
@@ -98,7 +146,7 @@ class AlpacaDevice:
         url = self._build_alpaca_url(name)
 
         # request it
-        res = self._session.put(url, data=values, timeout=10)
+        res = self._session.put(url, data=values, timeout=5)
         if res.status_code != 200:
             raise ValueError('Could not contact server.')
         response = ServerPutResponse(**res.json())

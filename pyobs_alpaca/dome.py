@@ -2,8 +2,6 @@ import logging
 import threading
 from typing import Tuple
 
-from requests import ConnectTimeout
-
 from pyobs.events import RoofOpenedEvent, RoofClosingEvent
 from pyobs.mixins import FollowMixin
 
@@ -16,7 +14,7 @@ from .device import AlpacaDevice
 log = logging.getLogger('pyobs')
 
 
-class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
+class AlpacaDome(FollowMixin, BaseDome):
     def __init__(self, tolerance: float = 3, park_az: float = 180, follow: str = None,
                  *args, **kwargs):
         """Initializes a new ASCOM Alpaca telescope.
@@ -27,8 +25,11 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
             follow: Name of other device (e.g. telescope) to follow.
         """
         BaseDome.__init__(self, *args, **kwargs, motion_status_interfaces=['IDome'])
-        AlpacaDevice.__init__(self, *args, **kwargs)
 
+        # device
+        self._device = AlpacaDevice(*args, **kwargs)
+        self._add_child_object(self._device)
+        
         # store
         self._tolerance = tolerance
         self._park_az = park_az
@@ -73,7 +74,7 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
             self._change_motion_status(IMotion.Status.INITIALIZING)
 
             # execute command
-            self.put('OpenShutter')
+            self._device.put('OpenShutter')
 
             # wait for it
             status = None
@@ -86,7 +87,7 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
 
                 # wait a little and update
                 self._abort_shutter.wait(1)
-                status = self.get('ShutterStatus')
+                status = self._device.get('ShutterStatus')
 
             # set new status
             log.info('Dome opened.')
@@ -109,8 +110,8 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
             self.comm.send_event(RoofClosingEvent())
 
             # send command for closing shutter and rotate to South
-            self.put('CloseShutter')
-            self.put('SlewToAzimuth', Azimuth=0)
+            self._device.put('CloseShutter')
+            self._device.put('SlewToAzimuth', Azimuth=0)
 
             # wait for it
             status = None
@@ -123,7 +124,7 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
 
                 # wait a little and update
                 self._abort_shutter.wait(1)
-                status = self.get('ShutterStatus')
+                status = self._device.get('ShutterStatus')
 
             # set new status
             log.info('Dome closed.')
@@ -138,7 +139,7 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
         """
 
         # execute command
-        self.put('SlewToAzimuth', Azimuth=az)
+        self._device.put('SlewToAzimuth', Azimuth=az)
 
         # wait for it
         log_timer = 0
@@ -229,7 +230,8 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
         """
 
         # check that motion is not in one of the states listed below
-        return self.get_motion_status() not in [IMotion.Status.PARKED, IMotion.Status.INITIALIZING,
+        return self._device.connected and \
+               self.get_motion_status() not in [IMotion.Status.PARKED, IMotion.Status.INITIALIZING,
                                                 IMotion.Status.PARKING, IMotion.Status.ERROR, IMotion.Status.UNKNOWN]
 
     def _update_status(self):
@@ -239,8 +241,8 @@ class AlpacaDome(FollowMixin, BaseDome, AlpacaDevice):
         while not self.closing.is_set():
             # get azimuth
             try:
-                self._azimuth = self.get('Azimuth')
-            except (ValueError, ConnectTimeout):
+                self._azimuth = self._device.get('Azimuth')
+            except ValueError:
                 # ignore it
                 pass
 

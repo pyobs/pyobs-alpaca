@@ -12,11 +12,14 @@ from .device import AlpacaDevice
 log = logging.getLogger(__name__)
 
 
-class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, AlpacaDevice):
+class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
     def __init__(self, *args, **kwargs):
         Module.__init__(self, *args, **kwargs)
-        AlpacaDevice.__init__(self, *args, **kwargs)
 
+        # device
+        self._device = AlpacaDevice(*args, **kwargs)
+        self._add_child_object(self._device)
+        
         # variables
         self._focus_offset = 0
 
@@ -65,8 +68,8 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, Al
 
         # get pos and step size
         # StepSize is in microns, so multiply with 1000
-        pos = self.get('Position')
-        step = self.get('StepSize') * 1000.
+        pos = self._device.get('Position')
+        step = self._device.get('StepSize') * 1000.
 
         # return header
         return {
@@ -95,7 +98,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, Al
         """
 
         # get current focus (without offset)
-        focus = self.get_focus()
+        focus = self._device.get_focus()
 
         # set offset
         self._focus_offset = offset
@@ -113,16 +116,16 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, Al
         # acquire lock
         with LockWithAbort(self._lock_motion, self._abort_motion):
             # get step size
-            step = self.get('StepSize')
+            step = self._device.get('StepSize')
 
             # calculating new focus and move it
             log.info('Moving focus to %.2fmm...', focus)
             self._change_motion_status(IMotion.Status.SLEWING, interface='IFocuser')
             foc = int(focus * step * 1000.)
-            self.put('Move', Position=foc)
+            self._device.put('Move', Position=foc)
 
             # wait for it
-            while abs(self.get('Position') - foc) > 10:
+            while abs(self._device.get('Position') - foc) > 10:
                 # abort?
                 if self._abort_motion.is_set():
                     log.warning('Setting focus aborted.')
@@ -132,7 +135,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, Al
                 time.sleep(0.1)
 
             # finished
-            log.info('Reached new focus of %.2fmm.', self.get('Position') / step / 1000.)
+            log.info('Reached new focus of %.2fmm.', self._device.get('Position') / step / 1000.)
             self._change_motion_status(IMotion.Status.POSITIONED, interface='IFocuser')
 
     def get_focus(self, *args, **kwargs) -> float:
@@ -144,8 +147,8 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, Al
 
         # get pos and step size
         # StepSize is in microns, so multiply with 1000
-        pos = self.get('Position')
-        step = self.get('StepSize') * 1000.
+        pos = self._device.get('Position')
+        step = self._device.get('StepSize') * 1000.
 
         # return current focus - offset
         return pos / step - self._focus_offset
@@ -166,7 +169,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, Al
         """
 
         # stop motion
-        self.put('Halt')
+        self._device.put('Halt')
 
     def is_ready(self, *args, **kwargs) -> bool:
         """Returns the device is "ready", whatever that means for the specific device.
@@ -174,7 +177,11 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module, Al
         Returns:
             True, if telescope is initialized and not in an error state.
         """
-        return True
+
+        # check that motion is not in one of the states listed below
+        return self._device.connected and \
+               self.get_motion_status() not in [IMotion.Status.PARKED, IMotion.Status.INITIALIZING,
+                                                IMotion.Status.PARKING, IMotion.Status.ERROR, IMotion.Status.UNKNOWN]
 
 
 __all__ = ['AlpacaFocuser']
