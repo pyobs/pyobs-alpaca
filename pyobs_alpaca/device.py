@@ -66,6 +66,8 @@ class AlpacaDevice(Object):
 
         # check connected
         self._check_connected()
+        if not self._connected:
+            log.warning('Could not connect to ASCOM server.')
 
     def _check_connected_thread(self):
         """Periodically check, whether we're connected to ASCOM."""
