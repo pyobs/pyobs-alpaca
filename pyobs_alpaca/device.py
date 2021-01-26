@@ -1,6 +1,7 @@
 import logging
 from typing import Any, NamedTuple
 import requests
+from requests import ConnectTimeout
 from urllib3.exceptions import ConnectTimeoutError
 
 from pyobs.object import Object
@@ -130,7 +131,7 @@ class AlpacaDevice(Object):
                 raise ValueError('Could not contact server.')
             response = ServerGetResponse(**res.json())
 
-        except (ConnectTimeoutError, ConnectionRefusedError):
+        except (ConnectTimeoutError, ConnectionRefusedError, ConnectTimeout):
             raise ValueError('Could not connect to server.')
 
         # check error
@@ -177,7 +178,7 @@ class AlpacaDevice(Object):
                 raise ValueError('Could not contact server.')
             response = ServerPutResponse(**res.json())
 
-        except (ConnectTimeoutError, ConnectionRefusedError):
+        except (ConnectTimeoutError, ConnectionRefusedError, ConnectTimeout):
             raise ValueError('Could not connect to server.')
 
         # check error
