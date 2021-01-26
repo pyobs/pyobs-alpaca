@@ -25,7 +25,7 @@ class ServerGetResponse(NamedTuple):
 
 class AlpacaDevice(Object):
     def __init__(self, server: str = None, port: int = None, type: str = None, device: int = None, version: str = 'v1',
-                 *args, **kwargs):
+                 alive_parameter: str = 'Connected', *args, **kwargs):
         """Initializes a new ASCOM Alpaca device.
 
         Args:
@@ -34,15 +34,17 @@ class AlpacaDevice(Object):
             type: Type of device.
             device: Device number.
             version: Alpaca version.
+            alive_parameter: Name of parameter to request in alive ping.
         """
         Object.__init__(self, *args, **kwargs)
 
         # variables
-        self._alpaca_server = server
-        self._alpaca_port = port
-        self._alpaca_type = type
-        self._alpaca_device = device
-        self._alpaca_version = version
+        self._server = server
+        self._port = port
+        self._type = type
+        self._device = device
+        self._version = version
+        self._alive_param = alive_parameter
 
         # do we have a connection to the ASCOM Remote server?
         self._connected = False
@@ -81,7 +83,7 @@ class AlpacaDevice(Object):
 
         # get new status
         try:
-            self._get('Connected')
+            self._get(self._alive_param)
             connected = True
         except (requests.ConnectionError, ConnectTimeoutError, ConnectionRefusedError):
             connected = False
@@ -105,8 +107,8 @@ class AlpacaDevice(Object):
         Returns:
             Full Alpaca URL
         """
-        return 'http://%s:%d/api/%s/%s/%d/%s' % (self._alpaca_server, self._alpaca_port, self._alpaca_version,
-                                                 self._alpaca_type, self._alpaca_device, name.lower())
+        return 'http://%s:%d/api/%s/%s/%d/%s' % (self._server, self._port, self._version,
+                                                 self._type, self._device, name.lower())
 
     def _get(self, name: str) -> Any:
         """Calls GET on Alpaca server, which returns value for variable with given name.
