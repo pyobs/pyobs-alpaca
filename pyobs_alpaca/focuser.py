@@ -68,13 +68,18 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
 
         # get pos and step size
         # StepSize is in microns, so multiply with 1000
-        pos = self._device.get('Position')
-        step = self._device.get('StepSize') * 1000.
+        try:
+            pos = self._device.get('Position')
+            step = self._device.get('StepSize') * 1000.
 
-        # return header
-        return {
-            'TEL-FOCU': (pos / step, 'Focus of telescope [mm]')
-        }
+            # return header
+            return {
+                'TEL-FOCU': (pos / step, 'Focus of telescope [mm]')
+            }
+
+        except ValueError as e:
+            log.error('Could not determine focus position: %s', e)
+            return {}
 
     @timeout(60000)
     def set_focus(self, focus: float, *args, **kwargs):
