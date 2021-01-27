@@ -348,7 +348,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         try:
             # get offsets
-            ra_off, dec_off = self._device.get_radec_offsets()
+            ra_off, dec_off = self.get_radec_offsets()
 
             # define values to request
             hdr['RAOFF'] = (ra_off, 'RA offset [deg]')
