@@ -78,7 +78,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
             }
 
         except ValueError as e:
-            log.error('Could not determine focus position: %s', e)
+            log.warning('Could not determine focus position: %s', e)
             return {}
 
     @timeout(60000)
