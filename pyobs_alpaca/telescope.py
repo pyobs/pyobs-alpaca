@@ -221,7 +221,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             log.info('Setting telescope offsets to dRA=%.2f", dDec=%.2f"...', dra * 3600., ddec * 3600.)
 
             # get current coordinates (with old offsets)
-            ra, dec = self._device.get_radec()
+            ra, dec = self.get_radec()
 
             # store offsets
             self._offset_ra = dra
