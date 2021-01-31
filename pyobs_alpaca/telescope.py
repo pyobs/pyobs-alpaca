@@ -289,7 +289,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         try:
             # create sky coordinates
-            return self.get('Altitude'), self.get('Azimuth')
+            return self._device.get('Altitude'), self._device.get('Azimuth')
 
         except ValueError:
             raise ValueError('Could not fetch Alt/Az.')
