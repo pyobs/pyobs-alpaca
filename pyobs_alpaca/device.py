@@ -131,8 +131,8 @@ class AlpacaDevice(Object):
                 raise ValueError('Could not contact server.')
             response = ServerGetResponse(**res.json())
 
-        except (ConnectTimeoutError, ConnectionRefusedError, ConnectTimeout, ReadTimeout):
-            raise ValueError('Could not connect to server.')
+        except Exception as e:
+            raise ValueError('Could not connect to server: ' + str(e))
 
         # check error
         if response.ErrorNumber != 0:
@@ -178,8 +178,8 @@ class AlpacaDevice(Object):
                 raise ValueError('Could not contact server.')
             response = ServerPutResponse(**res.json())
 
-        except (ConnectTimeoutError, ConnectionRefusedError, ConnectTimeout, ReadTimeout):
-            raise ValueError('Could not connect to server.')
+        except Exception as e:
+            raise ValueError('Could not connect to server: ' + str(e))
 
         # check error
         if response.ErrorNumber != 0:
