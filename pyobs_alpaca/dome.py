@@ -138,11 +138,8 @@ class AlpacaDome(FollowMixin, BaseDome):
             abort: Abort event.
         """
 
-        # correct az
-        az = self._adjust_azimuth(az)
-
         # execute command
-        self._device.put('SlewToAzimuth', Azimuth=az)
+        self._device.put('SlewToAzimuth', Azimuth=self._adjust_azimuth(az))
 
         # wait for it
         log_timer = 0
