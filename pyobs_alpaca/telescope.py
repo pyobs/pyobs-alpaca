@@ -149,11 +149,6 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         # reset offsets
         self._offset_ra, self._offset_dec = 0, 0
 
-        # correct az
-        az += 180
-        if az > 360:
-            az -= 360
-
         try:
             # start slewing
             self._device.put('Tracking', Tracking=False)
