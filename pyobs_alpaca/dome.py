@@ -241,7 +241,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         while not self.closing.is_set():
             # get azimuth
             try:
-                self._azimuth = self._device.get('Azimuth')
+                self._azimuth = self._adjust_azimuth(self._device.get('Azimuth'))
             except ValueError:
                 # ignore it
                 pass
