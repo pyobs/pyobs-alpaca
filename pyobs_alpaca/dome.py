@@ -138,11 +138,6 @@ class AlpacaDome(FollowMixin, BaseDome):
             abort: Abort event.
         """
 
-        # correct az
-        az += 180
-        if az > 360:
-            az -= 360
-
         # execute command
         self._device.put('SlewToAzimuth', Azimuth=az)
 
@@ -246,9 +241,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         while not self.closing.is_set():
             # get azimuth
             try:
-                self._azimuth = self._device.get('Azimuth') + 180
-                if self._azimuth > 360:
-                    self._azimuth -= 360.
+                self._azimuth = self._adjust_azimuth(self._device.get('Azimuth'))
             except ValueError:
                 # ignore it
                 pass
