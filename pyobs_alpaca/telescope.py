@@ -149,6 +149,11 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         # reset offsets
         self._offset_ra, self._offset_dec = 0, 0
 
+        # correct az
+        az += 180
+        if az > 360:
+            az -= 360
+
         try:
             # start slewing
             self._device.put('Tracking', Tracking=False)
@@ -288,8 +293,13 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         """
 
         try:
+            # correct az
+            az = self._device.get('Azimuth') + 180
+            if az > 360:
+                az -= 360
+
             # create sky coordinates
-            return self._device.get('Altitude'), self._device.get('Azimuth')
+            return self._device.get('Altitude'), az
 
         except ValueError:
             raise ValueError('Could not fetch Alt/Az.')
