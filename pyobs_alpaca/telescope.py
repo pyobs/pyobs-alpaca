@@ -126,7 +126,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
             # park telescope
             try:
-                self._device.put('Park')
+                self._device.put('Park', timeout=60)
                 self._change_motion_status(IMotion.Status.PARKED)
                 log.info('Telescope parked.')
 

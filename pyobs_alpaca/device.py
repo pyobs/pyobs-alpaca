@@ -156,11 +156,12 @@ class AlpacaDevice(Object):
             raise ValueError('Not connected to ASCOM.')
         return self._get(name)
 
-    def put(self, name: str, **values):
+    def put(self, name: str, timeout: float = 5, **values):
         """Calls PUT on Alpaca server with given variable, which might set a variable or call a method.
 
         Args:
             name: Name of variable.
+            timeout: Time in sec for request.
             values: Values to set.
         """
 
@@ -173,7 +174,7 @@ class AlpacaDevice(Object):
 
         try:
             # request it
-            res = self._session.put(url, data=values, timeout=5)
+            res = self._session.put(url, data=values, timeout=timeout)
             if res.status_code != 200:
                 raise ValueError('Could not contact server.')
             response = ServerPutResponse(**res.json())
