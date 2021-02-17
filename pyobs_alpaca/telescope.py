@@ -333,7 +333,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         """Synchronize telescope on current target using current offsets."""
 
         # get current RA/Dec without offsets
-        ra, dec = self._device.get_radec()
+        ra, dec = self.get_radec()
 
         # sync
         self._device.put('SyncToCoordinates', RightAscension=ra / 15., Declination=dec)
