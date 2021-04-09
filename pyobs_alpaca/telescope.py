@@ -1,9 +1,9 @@
 import logging
 import threading
+from typing import Dict, List, Tuple, Any
 import numpy as np
 
 from pyobs.mixins import FitsNamespaceMixin
-
 from pyobs.interfaces import IFitsHeaderProvider, IMotion, IRaDecOffsets, ISyncTarget
 from pyobs.modules import timeout
 from pyobs.modules.telescope.basetelescope import BaseTelescope
@@ -252,7 +252,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
                 self._change_motion_status(IMotion.Status.UNKNOWN)
                 raise ValueError('Could not move telescope to RA/Dec offset.')
 
-    def get_radec_offsets(self, *args, **kwargs) -> (float, float):
+    def get_radec_offsets(self, *args, **kwargs) -> Tuple[float, float]:
         """Get RA/Dec offset.
 
         Returns:
@@ -260,7 +260,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         """
         return self._offset_ra, self._offset_dec
 
-    def get_radec(self, *args, **kwargs) -> (float, float):
+    def get_radec(self, *args, **kwargs) -> Tuple[float, float]:
         """Returns current RA and Dec.
 
         Returns:
@@ -280,7 +280,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         except ValueError:
             raise ValueError('Could not fetch Alt/Az.')
 
-    def get_altaz(self, *args, **kwargs) -> (float, float):
+    def get_altaz(self, *args, **kwargs) -> Tuple[float, float]:
         """Returns current Alt and Az.
 
         Returns:
@@ -338,7 +338,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         # sync
         self._device.put('SyncToCoordinates', RightAscension=ra / 15., Declination=dec)
 
-    def get_fits_headers(self, namespaces: list = None, *args, **kwargs) -> dict:
+    def get_fits_headers(self, namespaces: List[str] = None, *args, **kwargs) -> Dict[str, Tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:
