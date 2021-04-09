@@ -30,8 +30,8 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         self._settle_time = settle_time
 
         # offsets in ra/dec
-        self._offset_ra = 0
-        self._offset_dec = 0
+        self._offset_ra = 0.
+        self._offset_dec = 0.
 
         # mixins
         FitsNamespaceMixin.__init__(self, *args, **kwargs)
