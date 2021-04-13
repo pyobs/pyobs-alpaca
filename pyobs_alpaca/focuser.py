@@ -3,7 +3,7 @@ import threading
 import time
 from typing import List, Dict, Tuple, Any
 
-from pyobs import Module
+from pyobs.modules import Module
 from pyobs.interfaces import IFocuser, IFitsHeaderProvider, IMotion
 from pyobs.mixins import MotionStatusMixin
 from pyobs.modules import timeout
