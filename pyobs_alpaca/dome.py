@@ -8,6 +8,7 @@ from pyobs.mixins import FollowMixin
 from pyobs.interfaces import IMotion, IAltAz
 from pyobs.modules import timeout
 from pyobs.modules.roof import BaseDome
+from pyobs.utils.enums import MotionStatus
 from pyobs.utils.threads import LockWithAbort
 from .device import AlpacaDevice
 
@@ -57,7 +58,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         BaseDome.open(self)
 
         # init status to IDLE
-        self._change_motion_status(IMotion.Status.IDLE)
+        self._change_motion_status(MotionStatus.IDLE)
 
     @timeout(1200000)
     def init(self, *args, **kwargs):
@@ -71,7 +72,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
             log.info('Opening dome...')
-            self._change_motion_status(IMotion.Status.INITIALIZING)
+            self._change_motion_status(MotionStatus.INITIALIZING)
 
             # execute command
             self._device.put('OpenShutter')
@@ -82,7 +83,7 @@ class AlpacaDome(FollowMixin, BaseDome):
                 # error?
                 if status == 4:
                     log.error('Could not open dome.')
-                    self._change_motion_status(IMotion.Status.UNKNOWN)
+                    self._change_motion_status(MotionStatus.UNKNOWN)
                     return
 
                 # wait a little and update
@@ -91,7 +92,7 @@ class AlpacaDome(FollowMixin, BaseDome):
 
             # set new status
             log.info('Dome opened.')
-            self._change_motion_status(IMotion.Status.POSITIONED)
+            self._change_motion_status(MotionStatus.POSITIONED)
             self.comm.send_event(RoofOpenedEvent())
 
     @timeout(1200000)
@@ -106,7 +107,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
             log.info('Closing dome...')
-            self._change_motion_status(IMotion.Status.PARKING)
+            self._change_motion_status(MotionStatus.PARKING)
             self.comm.send_event(RoofClosingEvent())
 
             # send command for closing shutter and rotate to South
@@ -119,7 +120,7 @@ class AlpacaDome(FollowMixin, BaseDome):
                 # error?
                 if status == 4:
                     log.error('Could not close dome.')
-                    self._change_motion_status(IMotion.Status.UNKNOWN)
+                    self._change_motion_status(MotionStatus.UNKNOWN)
                     return
 
                 # wait a little and update
@@ -128,7 +129,7 @@ class AlpacaDome(FollowMixin, BaseDome):
 
             # set new status
             log.info('Dome closed.')
-            self._change_motion_status(IMotion.Status.PARKED)
+            self._change_motion_status(MotionStatus.PARKED)
 
     def _move(self, az: float, abort: threading.Event):
         """Move the roof and wait for it.
@@ -196,13 +197,13 @@ class AlpacaDome(FollowMixin, BaseDome):
             self._altitude = alt
 
             # change status to TRACKING or SLEWING, depending on whether we're tracking
-            self._change_motion_status(IMotion.Status.TRACKING if tracking else IMotion.Status.SLEWING)
+            self._change_motion_status(MotionStatus.TRACKING if tracking else MotionStatus.SLEWING)
 
             # move dome
             self._move(az, self._abort_move)
 
             # change status to TRACKING or POSITIONED, depending on whether we're tracking
-            self._change_motion_status(IMotion.Status.TRACKING if self.is_following else IMotion.Status.POSITIONED)
+            self._change_motion_status(MotionStatus.TRACKING if self.is_following else MotionStatus.POSITIONED)
 
     def get_altaz(self, *args, **kwargs) -> Tuple[float, float]:
         """Returns current Alt and Az.
@@ -231,8 +232,8 @@ class AlpacaDome(FollowMixin, BaseDome):
 
         # check that motion is not in one of the states listed below
         return self._device.connected and \
-               self.get_motion_status() not in [IMotion.Status.PARKED, IMotion.Status.INITIALIZING,
-                                                IMotion.Status.PARKING, IMotion.Status.ERROR, IMotion.Status.UNKNOWN]
+               self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
+                                                MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
 
     def _update_status(self):
         """Update status from dome."""

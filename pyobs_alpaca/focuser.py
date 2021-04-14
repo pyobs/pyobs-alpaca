@@ -7,6 +7,7 @@ from pyobs.modules import Module
 from pyobs.interfaces import IFocuser, IFitsHeaderProvider, IMotion
 from pyobs.mixins import MotionStatusMixin
 from pyobs.modules import timeout
+from pyobs.utils.enums import MotionStatus
 from pyobs.utils.threads import LockWithAbort
 from .device import AlpacaDevice
 
@@ -39,7 +40,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
         MotionStatusMixin.open(self)
 
         # init status
-        self._change_motion_status(IMotion.Status.IDLE, interface='IFocuser')
+        self._change_motion_status(MotionStatus.IDLE, interface='IFocuser')
 
     def init(self, *args, **kwargs):
         """Initialize device.
@@ -126,7 +127,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
 
             # calculating new focus and move it
             log.info('Moving focus to %.2fmm...', focus)
-            self._change_motion_status(IMotion.Status.SLEWING, interface='IFocuser')
+            self._change_motion_status(MotionStatus.SLEWING, interface='IFocuser')
             foc = int(focus * step * 1000.)
             self._device.put('Move', Position=foc)
 
@@ -142,7 +143,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
 
             # finished
             log.info('Reached new focus of %.2fmm.', self._device.get('Position') / step / 1000.)
-            self._change_motion_status(IMotion.Status.POSITIONED, interface='IFocuser')
+            self._change_motion_status(MotionStatus.POSITIONED, interface='IFocuser')
 
     def get_focus(self, *args, **kwargs) -> float:
         """Return current focus.
@@ -186,8 +187,8 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
 
         # check that motion is not in one of the states listed below
         return self._device.connected and \
-               self.get_motion_status() not in [IMotion.Status.PARKED, IMotion.Status.INITIALIZING,
-                                                IMotion.Status.PARKING, IMotion.Status.ERROR, IMotion.Status.UNKNOWN]
+               self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
+                                                MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
 
 
 __all__ = ['AlpacaFocuser']
