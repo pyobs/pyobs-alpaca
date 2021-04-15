@@ -65,7 +65,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """Open dome.
 
         Raises:
-            ValueError if dome cannot be opened.
+            ValueError: If dome cannot be opened.
         """
 
         # acquire lock
@@ -100,7 +100,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """Close dome.
 
         Raises:
-            ValueError if dome cannot be opened.
+            ValueError: If dome cannot be opened.
         """
 
         # acquire lock
