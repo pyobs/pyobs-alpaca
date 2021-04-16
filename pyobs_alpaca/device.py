@@ -51,7 +51,7 @@ class AlpacaDevice(Object):
         self._connected = False
 
         # add thread
-        self._add_thread_func(self._check_connected_thread)
+        self.add_thread_func(self._check_connected_thread)
 
         # check version
         if version != 'v1':

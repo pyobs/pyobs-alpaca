@@ -25,7 +25,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # device
         self._device = AlpacaDevice(*args, **kwargs)
-        self._add_child_object(self._device)
+        self.add_child_object(self._device)
 
         # variables
         self._settle_time = settle_time

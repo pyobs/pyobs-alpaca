@@ -29,7 +29,7 @@ class AlpacaDome(FollowMixin, BaseDome):
 
         # device
         self._device = AlpacaDevice(*args, **kwargs)
-        self._add_child_object(self._device)
+        self.add_child_object(self._device)
         
         # store
         self._tolerance = tolerance
@@ -48,7 +48,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         self._set_az = 0
 
         # start thread
-        self._add_thread_func(self._update_status)
+        self.add_thread_func(self._update_status)
 
         # mixins
         FollowMixin.__init__(self, device=follow, interval=10, tolerance=tolerance, mode=IAltAz)
