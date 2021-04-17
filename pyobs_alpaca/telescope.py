@@ -15,6 +15,8 @@ log = logging.getLogger('pyobs')
 
 
 class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IRaDecOffsets, ISyncTarget):
+    __module__ = 'pyobs_alpaca'
+
     def __init__(self, settle_time: float = 3.0, *args, **kwargs):
         """Initializes a new ASCOM Alpaca telescope.
 

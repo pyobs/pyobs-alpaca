@@ -15,6 +15,8 @@ log = logging.getLogger(__name__)
 
 
 class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
+    __module__ = 'pyobs_alpaca'
+
     def __init__(self, *args, **kwargs):
         Module.__init__(self, *args, **kwargs)
 

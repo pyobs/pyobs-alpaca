@@ -16,6 +16,8 @@ log = logging.getLogger('pyobs')
 
 
 class AlpacaDome(FollowMixin, BaseDome):
+    __module__ = 'pyobs_alpaca'
+
     def __init__(self, tolerance: float = 3, park_az: float = 180, follow: str = None,
                  *args, **kwargs):
         """Initializes a new ASCOM Alpaca telescope.
