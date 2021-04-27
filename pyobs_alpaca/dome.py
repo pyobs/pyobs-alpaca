@@ -178,11 +178,6 @@ class AlpacaDome(FollowMixin, BaseDome):
             ValueError: If device could not move.
         """
 
-        # only move, when ready
-        if not self.is_ready():
-            log.warning('Dome not ready, ignoring slew command.')
-            return
-
         # destination az already set?
         if az == self._set_az:
             return
