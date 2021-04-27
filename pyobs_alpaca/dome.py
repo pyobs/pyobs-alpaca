@@ -53,7 +53,8 @@ class AlpacaDome(FollowMixin, BaseDome):
         self.add_thread_func(self._update_status)
 
         # mixins
-        FollowMixin.__init__(self, device=follow, interval=10, tolerance=tolerance, mode=IAltAz)
+        FollowMixin.__init__(self, device=follow, interval=10, tolerance=tolerance, mode=IAltAz,
+                             only_follow_when_ready=False)
 
     def open(self):
         """Open module."""
