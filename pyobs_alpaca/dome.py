@@ -106,6 +106,10 @@ class AlpacaDome(FollowMixin, BaseDome):
             ValueError: If dome cannot be opened.
         """
 
+        # if already closing, ignore
+        if self.get_motion_status() == MotionStatus.PARKING:
+            return
+
         # acquire lock
         with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
