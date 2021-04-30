@@ -51,7 +51,7 @@ class AlpacaDevice(Object):
         self._connected = False
 
         # add thread
-        self._add_thread_func(self._check_connected_thread)
+        self.add_thread_func(self._check_connected_thread)
 
         # check version
         if version != 'v1':
@@ -131,8 +131,8 @@ class AlpacaDevice(Object):
                 raise ValueError('Could not contact server.')
             response = ServerGetResponse(**res.json())
 
-        except (ConnectTimeoutError, ConnectionRefusedError, ConnectTimeout, ReadTimeout):
-            raise ValueError('Could not connect to server.')
+        except Exception as e:
+            raise ValueError('Could not connect to server: ' + str(e))
 
         # check error
         if response.ErrorNumber != 0:
@@ -156,11 +156,12 @@ class AlpacaDevice(Object):
             raise ValueError('Not connected to ASCOM.')
         return self._get(name)
 
-    def put(self, name: str, **values):
+    def put(self, name: str, timeout: float = 5, **values):
         """Calls PUT on Alpaca server with given variable, which might set a variable or call a method.
 
         Args:
             name: Name of variable.
+            timeout: Time in sec for request.
             values: Values to set.
         """
 
@@ -173,13 +174,13 @@ class AlpacaDevice(Object):
 
         try:
             # request it
-            res = self._session.put(url, data=values, timeout=5)
+            res = self._session.put(url, data=values, timeout=timeout)
             if res.status_code != 200:
                 raise ValueError('Could not contact server.')
             response = ServerPutResponse(**res.json())
 
-        except (ConnectTimeoutError, ConnectionRefusedError, ConnectTimeout, ReadTimeout):
-            raise ValueError('Could not connect to server.')
+        except Exception as e:
+            raise ValueError('Could not connect to server: ' + str(e))
 
         # check error
         if response.ErrorNumber != 0:

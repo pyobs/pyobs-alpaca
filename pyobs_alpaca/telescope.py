@@ -1,12 +1,13 @@
 import logging
 import threading
+from typing import Dict, List, Tuple, Any
 import numpy as np
 
 from pyobs.mixins import FitsNamespaceMixin
-
 from pyobs.interfaces import IFitsHeaderProvider, IMotion, IRaDecOffsets, ISyncTarget
 from pyobs.modules import timeout
 from pyobs.modules.telescope.basetelescope import BaseTelescope
+from pyobs.utils.enums import MotionStatus
 from pyobs.utils.threads import LockWithAbort
 from .device import AlpacaDevice
 
@@ -14,6 +15,8 @@ log = logging.getLogger('pyobs')
 
 
 class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IRaDecOffsets, ISyncTarget):
+    __module__ = 'pyobs_alpaca'
+
     def __init__(self, settle_time: float = 3.0, *args, **kwargs):
         """Initializes a new ASCOM Alpaca telescope.
 
@@ -24,14 +27,14 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # device
         self._device = AlpacaDevice(*args, **kwargs)
-        self._add_child_object(self._device)
+        self.add_child_object(self._device)
 
         # variables
         self._settle_time = settle_time
 
         # offsets in ra/dec
-        self._offset_ra = 0
-        self._offset_dec = 0
+        self._offset_ra = 0.
+        self._offset_dec = 0.
 
         # mixins
         FitsNamespaceMixin.__init__(self, *args, **kwargs)
@@ -46,32 +49,32 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # initial status
         status = self._get_status()
-        if status == IMotion.Status.UNKNOWN:
+        if status == MotionStatus.UNKNOWN:
             log.error('Could not fetch initial status from telescope.')
         self._change_motion_status(status)
 
-    def _get_status(self) -> IMotion.Status:
+    def _get_status(self) -> MotionStatus:
         """Get status of telescope."""
 
         try:
             if self._device.get('AtPark'):
-                return IMotion.Status.PARKED
+                return MotionStatus.PARKED
             elif self._device.get('Slewing'):
-                return IMotion.Status.SLEWING
+                return MotionStatus.SLEWING
             elif self._device.get('Tracking'):
-                return IMotion.Status.TRACKING
+                return MotionStatus.TRACKING
             else:
-                return IMotion.Status.IDLE
+                return MotionStatus.IDLE
 
         except ValueError:
-            return IMotion.Status.UNKNOWN
+            return MotionStatus.UNKNOWN
 
     def _check_status_thread(self):
         """Periodically check status of telescope."""
 
         while not self.closing.is_set():
             # only check, if status is unknown
-            if self.get_motion_status() == IMotion.Status.UNKNOWN:
+            if self.get_motion_status() == MotionStatus.UNKNOWN:
                 self._change_motion_status(self._get_status())
 
             # wait a little
@@ -93,16 +96,16 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
             # change status
             log.info('Initializing telescope...')
-            self._change_motion_status(IMotion.Status.INITIALIZING)
+            self._change_motion_status(MotionStatus.INITIALIZING)
 
             # move to init position
             try:
                 self._move_altaz(30, 180., self._abort_move)
-                self._change_motion_status(IMotion.Status.IDLE)
+                self._change_motion_status(MotionStatus.IDLE)
                 log.info('Telescope initialized.')
 
             except ValueError:
-                self._change_motion_status(IMotion.Status.UNKNOWN)
+                self._change_motion_status(MotionStatus.UNKNOWN)
                 raise ValueError('Could not init telescope.')
 
 
@@ -122,16 +125,16 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
             # change status
             log.info('Parking telescope...')
-            self._change_motion_status(IMotion.Status.PARKING)
+            self._change_motion_status(MotionStatus.PARKING)
 
             # park telescope
             try:
-                self._device.put('Park')
-                self._change_motion_status(IMotion.Status.PARKED)
+                self._device.put('Park', timeout=60)
+                self._change_motion_status(MotionStatus.PARKED)
                 log.info('Telescope parked.')
 
             except ValueError:
-                self._change_motion_status(IMotion.Status.UNKNOWN)
+                self._change_motion_status(MotionStatus.UNKNOWN)
                 raise ValueError('Could not park telescope.')
 
     def _move_altaz(self, alt: float, az: float, abort_event: threading.Event):
@@ -163,7 +166,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             abort_event.wait(self._settle_time)
 
         except ValueError:
-            self._change_motion_status(IMotion.Status.UNKNOWN)
+            self._change_motion_status(MotionStatus.UNKNOWN)
             raise ValueError('Could not move telescope to Alt/Az.')
 
     def _move_radec(self, ra: float, dec: float, abort_event: threading.Event):
@@ -195,7 +198,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             abort_event.wait(self._settle_time)
 
         except ValueError:
-            self._change_motion_status(IMotion.Status.UNKNOWN)
+            self._change_motion_status(MotionStatus.UNKNOWN)
             raise ValueError('Could not move telescope to RA/Dec.')
 
     @timeout(10000)
@@ -217,7 +220,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
                 raise ValueError('Not connected to ASCOM.')
 
             # start slewing
-            self._change_motion_status(IMotion.Status.SLEWING)
+            self._change_motion_status(MotionStatus.SLEWING)
             log.info('Setting telescope offsets to dRA=%.2f", dDec=%.2f"...', dra * 3600., ddec * 3600.)
 
             # get current coordinates (with old offsets)
@@ -245,14 +248,14 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
                 self._abort_move.wait(self._settle_time)
 
                 # finish slewing
-                self._change_motion_status(IMotion.Status.TRACKING)
+                self._change_motion_status(MotionStatus.TRACKING)
                 log.info('Reached destination.')
 
             except ValueError:
-                self._change_motion_status(IMotion.Status.UNKNOWN)
+                self._change_motion_status(MotionStatus.UNKNOWN)
                 raise ValueError('Could not move telescope to RA/Dec offset.')
 
-    def get_radec_offsets(self, *args, **kwargs) -> (float, float):
+    def get_radec_offsets(self, *args, **kwargs) -> Tuple[float, float]:
         """Get RA/Dec offset.
 
         Returns:
@@ -260,7 +263,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         """
         return self._offset_ra, self._offset_dec
 
-    def get_radec(self, *args, **kwargs) -> (float, float):
+    def get_radec(self, *args, **kwargs) -> Tuple[float, float]:
         """Returns current RA and Dec.
 
         Returns:
@@ -280,7 +283,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         except ValueError:
             raise ValueError('Could not fetch Alt/Az.')
 
-    def get_altaz(self, *args, **kwargs) -> (float, float):
+    def get_altaz(self, *args, **kwargs) -> Tuple[float, float]:
         """Returns current Alt and Az.
 
         Returns:
@@ -288,8 +291,13 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         """
 
         try:
+            # correct az
+            az = self._device.get('Azimuth') + 180
+            if az > 360:
+                az -= 360
+
             # create sky coordinates
-            return self._device.get('Altitude'), self._device.get('Azimuth')
+            return self._device.get('Altitude'), az
 
         except ValueError:
             raise ValueError('Could not fetch Alt/Az.')
@@ -306,10 +314,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             self._abort_move.set()
             self._device.put('AbortSlew')
             self._device.put('Tracking', Tracking=False)
-            self._change_motion_status(IMotion.Status.IDLE)
+            self._change_motion_status(MotionStatus.IDLE)
 
         except ValueError:
-            self._change_motion_status(IMotion.Status.UNKNOWN)
+            self._change_motion_status(MotionStatus.UNKNOWN)
             raise ValueError('Could not stop telescope.')
 
     def is_ready(self, *args, **kwargs) -> bool:
@@ -321,19 +329,19 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
 
         # check that motion is not in one of the states listed below
         return self._device.connected and \
-               self.get_motion_status() not in [IMotion.Status.PARKED, IMotion.Status.INITIALIZING,
-                                                IMotion.Status.PARKING, IMotion.Status.ERROR, IMotion.Status.UNKNOWN]
+               self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
+                                                MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
 
     def sync_target(self, *args, **kwargs):
         """Synchronize telescope on current target using current offsets."""
 
         # get current RA/Dec without offsets
-        ra, dec = self._device.get_radec()
+        ra, dec = self.get_radec()
 
         # sync
         self._device.put('SyncToCoordinates', RightAscension=ra / 15., Declination=dec)
 
-    def get_fits_headers(self, namespaces: list = None, *args, **kwargs) -> dict:
+    def get_fits_headers(self, namespaces: List[str] = None, *args, **kwargs) -> Dict[str, Tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:
