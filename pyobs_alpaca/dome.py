@@ -71,6 +71,10 @@ class AlpacaDome(FollowMixin, BaseDome):
             ValueError: If dome cannot be opened.
         """
 
+        # if already opening, ignore
+        if self.get_motion_status() == MotionStatus.INITIALIZING:
+            return
+
         # acquire lock
         with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
@@ -181,6 +185,10 @@ class AlpacaDome(FollowMixin, BaseDome):
         Raises:
             ValueError: If device could not move.
         """
+
+        # do nothing, if initializing, parking or parked
+        if self.get_motion_status() in [MotionStatus.INITIALIZING, MotionStatus.PARKING, MotionStatus.PARKED]:
+            return
 
         # destination az already set?
         if az == self._set_az:
