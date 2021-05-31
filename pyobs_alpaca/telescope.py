@@ -88,6 +88,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
             ValueError: If telescope could not be initialized.
         """
 
+        # if already initializing, ignore
+        if self.get_motion_status() == MotionStatus.INITIALIZING:
+            return
+
         # acquire lock
         with LockWithAbort(self._lock_moving, self._abort_move):
             # not connected
@@ -116,6 +120,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IR
         Raises:
             ValueError: If telescope could not be parked.
         """
+
+        # if already parking, ignore
+        if self.get_motion_status() == MotionStatus.PARKING:
+            return
 
         # acquire lock
         with LockWithAbort(self._lock_moving, self._abort_move):
