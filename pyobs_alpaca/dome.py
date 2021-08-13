@@ -186,8 +186,8 @@ class AlpacaDome(FollowMixin, BaseDome):
             ValueError: If device could not move.
         """
 
-        # do nothing, if initializing, parking or parked
-        if self.get_motion_status() in [MotionStatus.INITIALIZING, MotionStatus.PARKING, MotionStatus.PARKED]:
+        # do nothing, if parked
+        if self.get_motion_status() in [MotionStatus.PARKED]:
             return
 
         # destination az already set?
