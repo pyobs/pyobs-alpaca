@@ -5,7 +5,7 @@ from typing import Tuple
 from pyobs.events import RoofOpenedEvent, RoofClosingEvent
 from pyobs.mixins import FollowMixin
 
-from pyobs.interfaces import IMotion, IAltAz
+from pyobs.interfaces import IMotion, IPointingAltAz
 from pyobs.modules import timeout
 from pyobs.modules.roof import BaseDome
 from pyobs.utils.enums import MotionStatus
@@ -53,7 +53,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         self.add_thread_func(self._update_status)
 
         # mixins
-        FollowMixin.__init__(self, device=follow, interval=10, tolerance=tolerance, mode=IAltAz,
+        FollowMixin.__init__(self, device=follow, interval=10, tolerance=tolerance, mode=IPointingAltAz,
                              only_follow_when_ready=False)
 
     def open(self):
