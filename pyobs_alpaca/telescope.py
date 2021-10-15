@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple, Any
 import numpy as np
 
 from pyobs.mixins import FitsNamespaceMixin
-from pyobs.interfaces import IFitsHeaderProvider, IMotion, IRaDecOffsets, ISyncTarget
+from pyobs.interfaces import IFitsHeaderProvider, IOffsetsRaDec, ISyncTarget
 from pyobs.modules import timeout
 from pyobs.modules.telescope.basetelescope import BaseTelescope
 from pyobs.utils.enums import MotionStatus
@@ -14,7 +14,7 @@ from .device import AlpacaDevice
 log = logging.getLogger('pyobs')
 
 
-class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IRaDecOffsets, ISyncTarget):
+class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IOffsetsRaDec, ISyncTarget):
     __module__ = 'pyobs_alpaca'
 
     def __init__(self, settle_time: float = 3.0, *args, **kwargs):
