@@ -210,7 +210,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IO
             raise ValueError('Could not move telescope to RA/Dec.')
 
     @timeout(10000)
-    def set_radec_offsets(self, dra: float, ddec: float, *args, **kwargs):
+    def set_offsets_radec(self, dra: float, ddec: float, *args, **kwargs):
         """Move an RA/Dec offset.
 
         Args:
@@ -263,7 +263,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IO
                 self._change_motion_status(MotionStatus.UNKNOWN)
                 raise ValueError('Could not move telescope to RA/Dec offset.')
 
-    def get_radec_offsets(self, *args, **kwargs) -> Tuple[float, float]:
+    def get_offsets_radec(self, *args, **kwargs) -> Tuple[float, float]:
         """Get RA/Dec offset.
 
         Returns:
@@ -364,7 +364,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IO
 
         try:
             # get offsets
-            ra_off, dec_off = self.get_radec_offsets()
+            ra_off, dec_off = self.get_offsets_radec()
 
             # define values to request
             hdr['RAOFF'] = (ra_off, 'RA offset [deg]')
