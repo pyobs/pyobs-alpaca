@@ -1,11 +1,11 @@
 import logging
 import threading
-from typing import Tuple
+from typing import Tuple, Optional, Any
 
 from pyobs.events import RoofOpenedEvent, RoofClosingEvent
 from pyobs.mixins import FollowMixin
 
-from pyobs.interfaces import IMotion, IPointingAltAz
+from pyobs.interfaces import IPointingAltAz
 from pyobs.modules import timeout
 from pyobs.modules.roof import BaseDome
 from pyobs.utils.enums import MotionStatus
@@ -18,8 +18,7 @@ log = logging.getLogger('pyobs')
 class AlpacaDome(FollowMixin, BaseDome):
     __module__ = 'pyobs_alpaca'
 
-    def __init__(self, tolerance: float = 3, park_az: float = 180, follow: str = None,
-                 *args, **kwargs):
+    def __init__(self, tolerance: float = 3, park_az: float = 180, follow: Optional[str] = None, **kwargs: Any):
         """Initializes a new ASCOM Alpaca telescope.
 
         Args:
@@ -27,10 +26,10 @@ class AlpacaDome(FollowMixin, BaseDome):
             park_az: Azimuth for park position.
             follow: Name of other device (e.g. telescope) to follow.
         """
-        BaseDome.__init__(self, *args, **kwargs, motion_status_interfaces=['IDome'])
+        BaseDome.__init__(self, **kwargs, motion_status_interfaces=['IDome'])
 
         # device
-        self._device = AlpacaDevice(*args, **kwargs)
+        self._device = AlpacaDevice(**kwargs)
         self.add_child_object(self._device)
         
         # store
@@ -45,9 +44,9 @@ class AlpacaDome(FollowMixin, BaseDome):
 
         # status
         self._shutter = None
-        self._altitude = 0
-        self._azimuth = 0
-        self._set_az = 0
+        self._altitude = 0.
+        self._azimuth = 0.
+        self._set_az = 0.
 
         # start thread
         self.add_thread_func(self._update_status)
@@ -56,7 +55,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         FollowMixin.__init__(self, device=follow, interval=10, tolerance=tolerance, mode=IPointingAltAz,
                              only_follow_when_ready=False)
 
-    def open(self):
+    def open(self) -> None:
         """Open module."""
         BaseDome.open(self)
 
@@ -64,7 +63,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         self._change_motion_status(MotionStatus.IDLE)
 
     @timeout(1200000)
-    def init(self, *args, **kwargs):
+    def init(self, **kwargs: Any) -> None:
         """Open dome.
 
         Raises:
@@ -103,7 +102,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             self.comm.send_event(RoofOpenedEvent())
 
     @timeout(1200000)
-    def park(self, *args, **kwargs):
+    def park(self, **kwargs: Any) -> None:
         """Close dome.
 
         Raises:
@@ -142,7 +141,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             log.info('Dome closed.')
             self._change_motion_status(MotionStatus.PARKED)
 
-    def _move(self, az: float, abort: threading.Event):
+    def _move(self, az: float, abort: threading.Event) -> None:
         """Move the roof and wait for it.
 
         Args:
@@ -175,7 +174,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         log.info('Moved to az=%.2f.', az)
 
     @timeout(1200000)
-    def move_altaz(self, alt: float, az: float, *args, **kwargs):
+    def move_altaz(self, alt: float, az: float, **kwargs: Any) -> None:
         """Moves to given coordinates.
 
         Args:
@@ -215,7 +214,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             # change status to TRACKING or POSITIONED, depending on whether we're tracking
             self._change_motion_status(MotionStatus.TRACKING if self.is_following else MotionStatus.POSITIONED)
 
-    def get_altaz(self, *args, **kwargs) -> Tuple[float, float]:
+    def get_altaz(self, **kwargs: Any) -> Tuple[float, float]:
         """Returns current Alt and Az.
 
         Returns:
@@ -223,7 +222,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """
         return self._altitude, self._azimuth
 
-    def stop_motion(self, device: str = None, *args, **kwargs):
+    def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
         """Stop the motion.
 
         Args:
@@ -233,7 +232,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         # not supported, but don't want to raise an exception
         pass
 
-    def is_ready(self, *args, **kwargs) -> bool:
+    def is_ready(self, **kwargs: Any) -> bool:
         """Returns the device is "ready", whatever that means for the specific device.
 
         Returns:
@@ -245,7 +244,7 @@ class AlpacaDome(FollowMixin, BaseDome):
                self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
                                                 MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
 
-    def _update_status(self):
+    def _update_status(self) -> None:
         """Update status from dome."""
 
         # loop forever

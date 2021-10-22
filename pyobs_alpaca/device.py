@@ -25,8 +25,8 @@ class ServerGetResponse(NamedTuple):
 
 
 class AlpacaDevice(Object):
-    def __init__(self, server: str = None, port: int = None, type: str = None, device: int = None, version: str = 'v1',
-                 alive_parameter: str = 'Connected', *args, **kwargs):
+    def __init__(self, server: str, port: int, type: str, device: int, version: str = 'v1',
+                 alive_parameter: str = 'Connected', **kwargs: Any):
         """Initializes a new ASCOM Alpaca device.
 
         Args:
@@ -37,7 +37,7 @@ class AlpacaDevice(Object):
             version: Alpaca version.
             alive_parameter: Name of parameter to request in alive ping.
         """
-        Object.__init__(self, *args, **kwargs)
+        Object.__init__(self, **kwargs)
 
         # variables
         self._server = server
@@ -61,10 +61,10 @@ class AlpacaDevice(Object):
         self._session = requests.session()
 
     @property
-    def connected(self):
+    def connected(self) -> bool:
         return self._connected
 
-    def open(self):
+    def open(self) -> None:
         """Open device."""
         Object.open(self)
 
@@ -73,13 +73,13 @@ class AlpacaDevice(Object):
         if not self._connected:
             log.warning('Could not connect to ASCOM server.')
 
-    def _check_connected_thread(self):
+    def _check_connected_thread(self) -> None:
         """Periodically check, whether we're connected to ASCOM."""
         while not self.closing.is_set():
             self._check_connected()
             self.closing.wait(5)
 
-    def _check_connected(self):
+    def _check_connected(self) -> None:
         """Check, whether we're connected to ASCOM"""
 
         # get new status
@@ -156,7 +156,7 @@ class AlpacaDevice(Object):
             raise ValueError('Not connected to ASCOM.')
         return self._get(name)
 
-    def put(self, name: str, timeout: float = 5, **values):
+    def put(self, name: str, timeout: float = 5, **values: Any) -> None:
         """Calls PUT on Alpaca server with given variable, which might set a variable or call a method.
 
         Args:
