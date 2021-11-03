@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='pyobs-alpaca',
-    version='0.13',
+    version='0.14',
     packages=['pyobs_alpaca'],
     url='',
     license='',
