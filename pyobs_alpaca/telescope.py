@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 
 from pyobs.mixins import FitsNamespaceMixin
-from pyobs.interfaces import IFitsHeaderProvider, IOffsetsRaDec, ISyncTarget
+from pyobs.interfaces import IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget
 from pyobs.modules import timeout
 from pyobs.modules.telescope.basetelescope import BaseTelescope
 from pyobs.utils.enums import MotionStatus
@@ -14,7 +14,7 @@ from .device import AlpacaDevice
 log = logging.getLogger('pyobs')
 
 
-class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IOffsetsRaDec, ISyncTarget):
+class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget):
     __module__ = 'pyobs_alpaca'
 
     def __init__(self, settle_time: float = 3.0, **kwargs: Any):
@@ -348,7 +348,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IO
         # sync
         self._device.put('SyncToCoordinates', RightAscension=ra / 15., Declination=dec)
 
-    def get_fits_headers(self, namespaces: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Tuple[Any, str]]:
+    def get_fits_header_before(self, namespaces: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:
@@ -359,7 +359,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderProvider, IO
         """
 
         # get headers from base
-        hdr = BaseTelescope.get_fits_headers(self)
+        hdr = BaseTelescope.get_fits_header_before(self)
 
         try:
             # get offsets

@@ -4,7 +4,7 @@ import time
 from typing import List, Dict, Tuple, Any, Optional
 
 from pyobs.modules import Module
-from pyobs.interfaces import IFocuser, IFitsHeaderProvider
+from pyobs.interfaces import IFocuser, IFitsHeaderBefore
 from pyobs.mixins import MotionStatusMixin
 from pyobs.modules import timeout
 from pyobs.utils.enums import MotionStatus
@@ -14,7 +14,7 @@ from .device import AlpacaDevice
 log = logging.getLogger(__name__)
 
 
-class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
+class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
     __module__ = 'pyobs_alpaca'
 
     def __init__(self, **kwargs: Any):
@@ -60,7 +60,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderProvider, Module):
         """
         pass
 
-    def get_fits_headers(self, namespaces: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Tuple[Any, str]]:
+    def get_fits_header_before(self, namespaces: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:
