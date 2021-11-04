@@ -3,6 +3,7 @@ import threading
 from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 
+from pyobs.events import OffsetsRaDecEvent
 from pyobs.mixins import FitsNamespaceMixin
 from pyobs.interfaces import IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget
 from pyobs.modules import timeout
@@ -229,6 +230,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # start slewing
             self._change_motion_status(MotionStatus.SLEWING)
             log.info('Setting telescope offsets to dRA=%.2f", dDec=%.2f"...', dra * 3600., ddec * 3600.)
+            self.comm.send_event(OffsetsRaDecEvent(ra=dra, dec=ddec))
 
             # get current coordinates (with old offsets)
             ra, dec = self.get_radec()
