@@ -1,8 +1,8 @@
+import asyncio
 import logging
+from functools import partial
 from typing import Any, NamedTuple
 import requests
-from requests import ConnectTimeout, ReadTimeout
-from urllib3.exceptions import ConnectTimeoutError
 
 from pyobs.object import Object
 
@@ -51,7 +51,7 @@ class AlpacaDevice(Object):
         self._connected = False
 
         # add thread
-        self.add_thread_func(self._check_connected_thread)
+        self.add_background_task(self._check_connected_thread)
 
         # check version
         if version != 'v1':
@@ -64,27 +64,27 @@ class AlpacaDevice(Object):
     def connected(self) -> bool:
         return self._connected
 
-    def open(self) -> None:
+    async def open(self) -> None:
         """Open device."""
-        Object.open(self)
+        await Object.open(self)
 
         # check connected
-        self._check_connected()
+        await self._check_connected()
         if not self._connected:
             log.warning('Could not connect to ASCOM server.')
 
-    def _check_connected_thread(self) -> None:
+    async def _check_connected_thread(self) -> None:
         """Periodically check, whether we're connected to ASCOM."""
-        while not self.closing.is_set():
-            self._check_connected()
-            self.closing.wait(5)
+        while True:
+            await self._check_connected()
+            await asyncio.sleep(5)
 
-    def _check_connected(self) -> None:
+    async def _check_connected(self) -> None:
         """Check, whether we're connected to ASCOM"""
 
         # get new status
         try:
-            self._get(self._alive_param)
+            await self._get(self._alive_param)
             connected = True
         except ValueError:
             connected = False
@@ -111,7 +111,7 @@ class AlpacaDevice(Object):
         return 'http://%s:%d/api/%s/%s/%d/%s' % (self._server, self._port, self._version,
                                                  self._type, self._device, name.lower())
 
-    def _get(self, name: str) -> Any:
+    async def _get(self, name: str) -> Any:
         """Calls GET on Alpaca server, which returns value for variable with given name.
 
         Args:
@@ -126,7 +126,8 @@ class AlpacaDevice(Object):
 
         try:
             # request it
-            res = self._session.get(url, timeout=5)
+            loop = asyncio.get_running_loop()
+            res = await loop.run_in_executor(None, partial(self._session.get, url, timeout=5))
             if res.status_code != 200:
                 raise ValueError('Could not contact server.')
             response = ServerGetResponse(**res.json())
@@ -141,7 +142,7 @@ class AlpacaDevice(Object):
         # return value
         return response.Value
 
-    def get(self, name: str) -> Any:
+    async def get(self, name: str) -> Any:
         """Calls GET on Alpaca server, which returns value for variable with given name.
 
         Args:
@@ -154,9 +155,9 @@ class AlpacaDevice(Object):
         # only do it, if connected
         if not self._connected:
             raise ValueError('Not connected to ASCOM.')
-        return self._get(name)
+        return await self._get(name)
 
-    def put(self, name: str, timeout: float = 5, **values: Any) -> None:
+    async def put(self, name: str, timeout: float = 5, **values: Any) -> None:
         """Calls PUT on Alpaca server with given variable, which might set a variable or call a method.
 
         Args:
@@ -174,7 +175,8 @@ class AlpacaDevice(Object):
 
         try:
             # request it
-            res = self._session.put(url, data=values, timeout=timeout)
+            loop = asyncio.get_running_loop()
+            res = await loop.run_in_executor(None, partial(self._session.put, url, data=values, timeout=timeout))
             if res.status_code != 200:
                 raise ValueError('Could not contact server.')
             response = ServerPutResponse(**res.json())
