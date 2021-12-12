@@ -76,7 +76,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             return
 
         # acquire lock
-        with LockWithAbort(self._lock_shutter, self._abort_shutter):
+        async with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
             log.info('Opening dome...')
             await self._change_motion_status(MotionStatus.INITIALIZING)
@@ -115,7 +115,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             return
 
         # acquire lock
-        with LockWithAbort(self._lock_shutter, self._abort_shutter):
+        async with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
             log.info('Closing dome...')
             await self._change_motion_status(MotionStatus.PARKING)
@@ -202,7 +202,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         tracking = self.is_following and not large_move
 
         # acquire lock
-        with LockWithAbort(self._lock_move, self._abort_move):
+        async with LockWithAbort(self._lock_move, self._abort_move):
             # store altitude
             self._altitude = alt
 

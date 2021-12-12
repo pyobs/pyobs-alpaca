@@ -50,7 +50,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         await BaseTelescope.open(self)
 
         # initial status
-        status = self._get_status()
+        status = await self._get_status()
         if status == MotionStatus.UNKNOWN:
             log.error('Could not fetch initial status from telescope.')
         await self._change_motion_status(status)
@@ -76,8 +76,8 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
         while not self.closing.is_set():
             # only check, if status is unknown
-            if self.get_motion_status() == MotionStatus.UNKNOWN:
-                await self._change_motion_status(self._get_status())
+            if await self.get_motion_status() == MotionStatus.UNKNOWN:
+                await self._change_motion_status(await self._get_status())
 
             # wait a little
             self.closing.wait(5)
@@ -95,7 +95,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             return
 
         # acquire lock
-        with LockWithAbort(self._lock_moving, self._abort_move):
+        async with LockWithAbort(self._lock_moving, self._abort_move):
             # not connected
             if not self._device.connected:
                 raise ValueError('Not connected to ASCOM.')
@@ -127,7 +127,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             return
 
         # acquire lock
-        with LockWithAbort(self._lock_moving, self._abort_move):
+        async with LockWithAbort(self._lock_moving, self._abort_move):
             # not connected
             if not self._device.connected:
                 raise ValueError('Not connected to ASCOM.')
@@ -223,7 +223,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """
 
         # acquire lock
-        with LockWithAbort(self._lock_moving, self._abort_move):
+        async with LockWithAbort(self._lock_moving, self._abort_move):
             # not connected
             if not self._device.connected:
                 raise ValueError('Not connected to ASCOM.')

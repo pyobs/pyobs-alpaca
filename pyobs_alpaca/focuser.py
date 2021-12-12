@@ -123,7 +123,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # acquire lock
-        with LockWithAbort(self._lock_motion, self._abort_motion):
+        async with LockWithAbort(self._lock_motion, self._abort_motion):
             # get step size
             step = await self._device.get('StepSize')
 
