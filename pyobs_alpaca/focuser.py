@@ -20,9 +20,8 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         Module.__init__(self, **kwargs)
 
         # device
-        self._device = AlpacaDevice(**kwargs)
-        self.add_child_object(self._device)
-        
+        self._device = self.add_child_object(AlpacaDevice, **kwargs)
+
         # variables
         self._focus_offset = 0.
 

@@ -30,8 +30,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         BaseDome.__init__(self, **kwargs, motion_status_interfaces=['IDome'])
 
         # device
-        self._device = AlpacaDevice(**kwargs)
-        self.add_child_object(self._device)
+        self._device = self.add_child_object(AlpacaDevice, **kwargs)
         
         # store
         self._tolerance = tolerance
