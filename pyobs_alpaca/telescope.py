@@ -90,7 +90,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """
 
         # if already initializing, ignore
-        if self.get_motion_status() == MotionStatus.INITIALIZING:
+        if await self.get_motion_status() == MotionStatus.INITIALIZING:
             return
 
         # acquire lock
@@ -122,7 +122,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """
 
         # if already parking, ignore
-        if self.get_motion_status() == MotionStatus.PARKING:
+        if await self.get_motion_status() == MotionStatus.PARKING:
             return
 
         # acquire lock

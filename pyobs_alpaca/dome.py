@@ -71,7 +71,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """
 
         # if already opening, ignore
-        if self.get_motion_status() == MotionStatus.INITIALIZING:
+        if await self.get_motion_status() == MotionStatus.INITIALIZING:
             return
 
         # acquire lock
