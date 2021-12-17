@@ -4,7 +4,6 @@ from typing import Tuple, Optional, Any
 
 from pyobs.events import RoofOpenedEvent, RoofClosingEvent
 from pyobs.mixins import FollowMixin
-
 from pyobs.interfaces import IPointingAltAz
 from pyobs.modules import timeout
 from pyobs.modules.roof import BaseDome
@@ -240,9 +239,9 @@ class AlpacaDome(FollowMixin, BaseDome):
         """
 
         # check that motion is not in one of the states listed below
-        return self._device.connected and \
-               await self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
-                                                      MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        states = [MotionStatus.PARKED, MotionStatus.INITIALIZING, MotionStatus.PARKING,
+                  MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        return self._device.connected and await self.get_motion_status() not in states
 
     async def _update_status(self) -> None:
         """Update status from dome."""

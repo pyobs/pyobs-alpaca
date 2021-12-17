@@ -187,10 +187,9 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # check that motion is not in one of the states listed below
-        return self._device.connected and \
-               await self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
-                                                      MotionStatus.PARKING, MotionStatus.ERROR,
-                                                      MotionStatus.UNKNOWN]
+        states = [MotionStatus.PARKED, MotionStatus.INITIALIZING, MotionStatus.PARKING,
+                  MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        return self._device.connected and await self.get_motion_status() not in states
 
 
 __all__ = ['AlpacaFocuser']

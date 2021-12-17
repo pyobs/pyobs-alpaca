@@ -25,7 +25,7 @@ class ServerGetResponse(NamedTuple):
 
 
 class AlpacaDevice(Object):
-    def __init__(self, server: str, port: int, type: str, device: int, version: str = 'v1',
+    def __init__(self, server: str, port: int, device_type: str, device: int, version: str = 'v1',
                  alive_parameter: str = 'Connected', **kwargs: Any):
         """Initializes a new ASCOM Alpaca device.
 
@@ -42,7 +42,7 @@ class AlpacaDevice(Object):
         # variables
         self._server = server
         self._port = port
-        self._type = type
+        self._type = device_type
         self._device = device
         self._version = version
         self._alive_param = alive_parameter

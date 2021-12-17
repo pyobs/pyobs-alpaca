@@ -337,9 +337,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """
 
         # check that motion is not in one of the states listed below
-        return self._device.connected and \
-               self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
-                                                MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        states = [MotionStatus.PARKED, MotionStatus.INITIALIZING,
+                  MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        return self._device.connected and await self.get_motion_status() not in states
 
     async def sync_target(self, **kwargs: Any) -> None:
         """Synchronize telescope on current target using current offsets."""
@@ -350,7 +350,8 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         # sync
         await self._device.put('SyncToCoordinates', RightAscension=ra / 15., Declination=dec)
 
-    async def get_fits_header_before(self, namespaces: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Tuple[Any, str]]:
+    async def get_fits_header_before(self, namespaces: Optional[List[str]] = None, **kwargs: Any) \
+            -> Dict[str, Tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:
