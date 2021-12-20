@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import threading
 from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 
@@ -79,7 +79,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
                 await self._change_motion_status(await self._get_status())
 
             # wait a little
-            self.closing.wait(5)
+            await asyncio.sleep(5)
 
     @timeout(60000)
     async def init(self, **kwargs: Any) -> None:
@@ -145,7 +145,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
                 await self._change_motion_status(MotionStatus.UNKNOWN)
                 raise ValueError('Could not park telescope.')
 
-    async def _move_altaz(self, alt: float, az: float, abort_event: threading.Event) -> None:
+    async def _move_altaz(self, alt: float, az: float, abort_event: asyncio.Event) -> None:
         """Actually moves to given coordinates. Must be implemented by derived classes.
 
         Args:
@@ -177,7 +177,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             await self._change_motion_status(MotionStatus.UNKNOWN)
             raise ValueError('Could not move telescope to Alt/Az.')
 
-    async def _move_radec(self, ra: float, dec: float, abort_event: threading.Event) -> None:
+    async def _move_radec(self, ra: float, dec: float, abort_event: asyncio.Event) -> None:
         """Actually starts tracking on given coordinates. Must be implemented by derived classes.
 
         Args:
