@@ -1,8 +1,7 @@
 import asyncio
 import logging
-from functools import partial
 from typing import Any, NamedTuple
-import requests
+import aiohttp
 
 from pyobs.object import Object
 
@@ -56,9 +55,6 @@ class AlpacaDevice(Object):
         # check version
         if version != 'v1':
             raise ValueError('Only Alpaca v1 is supported.')
-
-        # create session
-        self._session = requests.session()
 
     @property
     def connected(self) -> bool:
@@ -124,23 +120,20 @@ class AlpacaDevice(Object):
         # get url
         url = self._build_alpaca_url(name)
 
-        try:
-            # request it
-            loop = asyncio.get_running_loop()
-            res = await loop.run_in_executor(None, partial(self._session.get, url, timeout=5))
-            if res.status_code != 200:
-                raise ValueError('Could not contact server.')
-            response = ServerGetResponse(**res.json())
-
-        except Exception as e:
-            raise ValueError('Could not connect to server: ' + str(e))
+        # request it
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as response:
+                if response.status != 200:
+                    raise ValueError('Could not contact server.')
+                json = await response.json()
+                resp = ServerGetResponse(**json)
 
         # check error
-        if response.ErrorNumber != 0:
-            raise ValueError('Server error: %s' % response.ErrorMessage)
+        if resp.ErrorNumber != 0:
+            raise ValueError('Server error: %s' % resp.ErrorMessage)
 
         # return value
-        return response.Value
+        return resp.Value
 
     async def get(self, name: str) -> Any:
         """Calls GET on Alpaca server, which returns value for variable with given name.
@@ -173,20 +166,17 @@ class AlpacaDevice(Object):
         # get url
         url = self._build_alpaca_url(name)
 
-        try:
-            # request it
-            loop = asyncio.get_running_loop()
-            res = await loop.run_in_executor(None, partial(self._session.put, url, data=values, timeout=timeout))
-            if res.status_code != 200:
-                raise ValueError('Could not contact server.')
-            response = ServerPutResponse(**res.json())
-
-        except Exception as e:
-            raise ValueError('Could not connect to server: ' + str(e))
+        # request it
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, data=values, timeout=5) as response:
+                if response.status != 200:
+                    raise ValueError('Could not contact server.')
+                json = await response.json()
+                resp = ServerPutResponse(**json)
 
         # check error
-        if response.ErrorNumber != 0:
-            raise ValueError('Server error: %s' % response.ErrorMessage)
+        if resp.ErrorNumber != 0:
+            raise ValueError('Server error: %s' % resp.ErrorMessage)
 
 
 __all__ = ['AlpacaDevice']
