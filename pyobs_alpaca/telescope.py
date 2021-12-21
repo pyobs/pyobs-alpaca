@@ -73,7 +73,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
     async def _check_status_thread(self) -> None:
         """Periodically check status of telescope."""
 
-        while not self.closing.is_set():
+        while True:
             # only check, if status is unknown
             if await self.get_motion_status() == MotionStatus.UNKNOWN:
                 await self._change_motion_status(await self._get_status())
