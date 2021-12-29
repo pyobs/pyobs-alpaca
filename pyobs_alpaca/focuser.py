@@ -1,6 +1,5 @@
+import asyncio
 import logging
-import threading
-import time
 from typing import List, Dict, Tuple, Any, Optional
 
 from pyobs.modules import Module
@@ -21,30 +20,29 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         Module.__init__(self, **kwargs)
 
         # device
-        self._device = AlpacaDevice(**kwargs)
-        self.add_child_object(self._device)
-        
+        self._device = self.add_child_object(AlpacaDevice, **kwargs)
+
         # variables
         self._focus_offset = 0.
 
         # allow to abort motion
-        self._lock_motion = threading.Lock()
-        self._abort_motion = threading.Event()
+        self._lock_motion = asyncio.Lock()
+        self._abort_motion = asyncio.Event()
 
         # init mixins
         MotionStatusMixin.__init__(self, motion_status_interfaces=['IFocuser'])
 
-    def open(self) -> None:
+    async def open(self) -> None:
         """Open module."""
-        Module.open(self)
+        await Module.open(self)
 
         # open mixins
-        MotionStatusMixin.open(self)
+        await MotionStatusMixin.open(self)
 
         # init status
-        self._change_motion_status(MotionStatus.IDLE, interface='IFocuser')
+        await self._change_motion_status(MotionStatus.IDLE, interface='IFocuser')
 
-    def init(self, **kwargs: Any) -> None:
+    async def init(self, **kwargs: Any) -> None:
         """Initialize device.
 
         Raises:
@@ -52,7 +50,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
         pass
 
-    def park(self, **kwargs: Any) -> None:
+    async def park(self, **kwargs: Any) -> None:
         """Park device.
 
         Raises:
@@ -60,7 +58,8 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
         pass
 
-    def get_fits_header_before(self, namespaces: Optional[List[str]] = None, **kwargs: Any) -> Dict[str, Tuple[Any, str]]:
+    async def get_fits_header_before(self, namespaces: Optional[List[str]] = None, **kwargs: Any) \
+            -> Dict[str, Tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:
@@ -73,8 +72,8 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         # get pos and step size
         # StepSize is in microns, so multiply with 1000
         try:
-            pos = self._device.get('Position')
-            step = self._device.get('StepSize') * 1000.
+            pos = await self._device.get('Position')
+            step = await self._device.get('StepSize') * 1000.
 
             # return header
             return {
@@ -86,7 +85,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
             return {}
 
     @timeout(60000)
-    def set_focus(self, focus: float, **kwargs: Any) -> None:
+    async def set_focus(self, focus: float, **kwargs: Any) -> None:
         """Sets new focus.
 
         Args:
@@ -94,9 +93,9 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # set focus + offset
-        self._set_focus(focus + self._focus_offset)
+        await self._set_focus(focus + self._focus_offset)
 
-    def set_focus_offset(self, offset: float, **kwargs: Any) -> None:
+    async def set_focus_offset(self, offset: float, **kwargs: Any) -> None:
         """Sets focus offset.
 
         Args:
@@ -107,15 +106,15 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # get current focus (without offset)
-        focus = self.get_focus()
+        focus = await self.get_focus()
 
         # set offset
         self._focus_offset = offset
 
         # go to focus
-        self._set_focus(focus + self._focus_offset)
+        await self._set_focus(focus + self._focus_offset)
 
-    def _set_focus(self, focus: float) -> None:
+    async def _set_focus(self, focus: float) -> None:
         """Actually sets new focus.
 
         Args:
@@ -123,31 +122,31 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # acquire lock
-        with LockWithAbort(self._lock_motion, self._abort_motion):
+        async with LockWithAbort(self._lock_motion, self._abort_motion):
             # get step size
-            step = self._device.get('StepSize')
+            step = await self._device.get('StepSize')
 
             # calculating new focus and move it
             log.info('Moving focus to %.2fmm...', focus)
-            self._change_motion_status(MotionStatus.SLEWING, interface='IFocuser')
+            await self._change_motion_status(MotionStatus.SLEWING, interface='IFocuser')
             foc = int(focus * step * 1000.)
-            self._device.put('Move', Position=foc)
+            await self._device.put('Move', Position=foc)
 
             # wait for it
-            while abs(self._device.get('Position') - foc) > 10:
+            while abs(await self._device.get('Position') - foc) > 10:
                 # abort?
                 if self._abort_motion.is_set():
                     log.warning('Setting focus aborted.')
                     return
 
                 # sleep a little
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
 
             # finished
-            log.info('Reached new focus of %.2fmm.', self._device.get('Position') / step / 1000.)
-            self._change_motion_status(MotionStatus.POSITIONED, interface='IFocuser')
+            log.info('Reached new focus of %.2fmm.', await self._device.get('Position') / step / 1000.)
+            await self._change_motion_status(MotionStatus.POSITIONED, interface='IFocuser')
 
-    def get_focus(self, **kwargs: Any) -> float:
+    async def get_focus(self, **kwargs: Any) -> float:
         """Return current focus.
 
         Returns:
@@ -156,13 +155,13 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
 
         # get pos and step size
         # StepSize is in microns, so multiply with 1000
-        pos = float(self._device.get('Position'))
-        step = float(self._device.get('StepSize')) * 1000.
+        pos = float(await self._device.get('Position'))
+        step = float(await self._device.get('StepSize')) * 1000.
 
         # return current focus - offset
         return pos / step - self._focus_offset
 
-    def get_focus_offset(self, **kwargs: Any) -> float:
+    async def get_focus_offset(self, **kwargs: Any) -> float:
         """Return current focus offset.
 
         Returns:
@@ -170,7 +169,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
         return self._focus_offset
 
-    def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
+    async def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
         """Stop the motion.
 
         Args:
@@ -178,9 +177,9 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # stop motion
-        self._device.put('Halt')
+        await self._device.put('Halt')
 
-    def is_ready(self, **kwargs: Any) -> bool:
+    async def is_ready(self, **kwargs: Any) -> bool:
         """Returns the device is "ready", whatever that means for the specific device.
 
         Returns:
@@ -188,9 +187,9 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # check that motion is not in one of the states listed below
-        return self._device.connected and \
-               self.get_motion_status() not in [MotionStatus.PARKED, MotionStatus.INITIALIZING,
-                                                MotionStatus.PARKING, MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        states = [MotionStatus.PARKED, MotionStatus.INITIALIZING, MotionStatus.PARKING,
+                  MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        return self._device.connected and await self.get_motion_status() not in states
 
 
 __all__ = ['AlpacaFocuser']
