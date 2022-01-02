@@ -12,11 +12,11 @@ from pyobs.utils.parallel import event_wait
 from pyobs.utils.threads import LockWithAbort
 from .device import AlpacaDevice
 
-log = logging.getLogger('pyobs')
+log = logging.getLogger("pyobs")
 
 
 class AlpacaDome(FollowMixin, BaseDome):
-    __module__ = 'pyobs_alpaca'
+    __module__ = "pyobs_alpaca"
 
     def __init__(self, tolerance: float = 3, park_az: float = 180, follow: Optional[str] = None, **kwargs: Any):
         """Initializes a new ASCOM Alpaca telescope.
@@ -26,11 +26,11 @@ class AlpacaDome(FollowMixin, BaseDome):
             park_az: Azimuth for park position.
             follow: Name of other device (e.g. telescope) to follow.
         """
-        BaseDome.__init__(self, **kwargs, motion_status_interfaces=['IDome'])
+        BaseDome.__init__(self, **kwargs, motion_status_interfaces=["IDome"])
 
         # device
         self._device = self.add_child_object(AlpacaDevice, **kwargs)
-        
+
         # store
         self._tolerance = tolerance
         self._park_az = park_az
@@ -43,16 +43,17 @@ class AlpacaDome(FollowMixin, BaseDome):
 
         # status
         self._shutter = None
-        self._altitude = 0.
-        self._azimuth = 0.
-        self._set_az = 0.
+        self._altitude = 0.0
+        self._azimuth = 0.0
+        self._set_az = 0.0
 
         # start thread
         self.add_background_task(self._update_status)
 
         # mixins
-        FollowMixin.__init__(self, device=follow, interval=10, tolerance=tolerance, mode=IPointingAltAz,
-                             only_follow_when_ready=False)
+        FollowMixin.__init__(
+            self, device=follow, interval=10, tolerance=tolerance, mode=IPointingAltAz, only_follow_when_ready=False
+        )
 
     async def open(self) -> None:
         """Open module."""
@@ -76,27 +77,27 @@ class AlpacaDome(FollowMixin, BaseDome):
         # acquire lock
         async with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
-            log.info('Opening dome...')
+            log.info("Opening dome...")
             await self._change_motion_status(MotionStatus.INITIALIZING)
 
             # execute command
-            await self._device.put('OpenShutter')
+            await self._device.put("OpenShutter")
 
             # wait for it
             status = None
             while status != 0:
                 # error?
                 if status == 4:
-                    log.error('Could not open dome.')
+                    log.error("Could not open dome.")
                     await self._change_motion_status(MotionStatus.UNKNOWN)
                     return
 
                 # wait a little and update
                 await event_wait(self._abort_shutter, 1)
-                status = await self._device.get('ShutterStatus')
+                status = await self._device.get("ShutterStatus")
 
             # set new status
-            log.info('Dome opened.')
+            log.info("Dome opened.")
             await self._change_motion_status(MotionStatus.POSITIONED)
             await self.comm.send_event(RoofOpenedEvent())
 
@@ -115,29 +116,29 @@ class AlpacaDome(FollowMixin, BaseDome):
         # acquire lock
         async with LockWithAbort(self._lock_shutter, self._abort_shutter):
             # log
-            log.info('Closing dome...')
+            log.info("Closing dome...")
             await self._change_motion_status(MotionStatus.PARKING)
             await self.comm.send_event(RoofClosingEvent())
 
             # send command for closing shutter and rotate to South
-            await self._device.put('CloseShutter')
-            await self._device.put('SlewToAzimuth', Azimuth=0)
+            await self._device.put("CloseShutter")
+            await self._device.put("SlewToAzimuth", Azimuth=0)
 
             # wait for it
             status = None
             while status != 1:
                 # error?
                 if status == 4:
-                    log.error('Could not close dome.')
+                    log.error("Could not close dome.")
                     await self._change_motion_status(MotionStatus.UNKNOWN)
                     return
 
                 # wait a little and update
                 await event_wait(self._abort_shutter, 1)
-                status = await self._device.get('ShutterStatus')
+                status = await self._device.get("ShutterStatus")
 
             # set new status
-            log.info('Dome closed.')
+            log.info("Dome closed.")
             await self._change_motion_status(MotionStatus.PARKED)
 
     async def _move(self, az: float, abort: asyncio.Event) -> None:
@@ -149,7 +150,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """
 
         # execute command
-        await self._device.put('SlewToAzimuth', Azimuth=self._adjust_azimuth(az))
+        await self._device.put("SlewToAzimuth", Azimuth=self._adjust_azimuth(az))
 
         # wait for it
         log_timer = 0
@@ -160,8 +161,12 @@ class AlpacaDome(FollowMixin, BaseDome):
 
             # log?
             if log_timer == 0:
-                log.info('Moving dome from current az=%.2f° to %.2f° (%.2f° left)...',
-                         self._azimuth, az, 180 - abs(abs(az - self._azimuth) - 180))
+                log.info(
+                    "Moving dome from current az=%.2f° to %.2f° (%.2f° left)...",
+                    self._azimuth,
+                    az,
+                    180 - abs(abs(az - self._azimuth) - 180),
+                )
             log_timer += 1
             if log_timer == 10:
                 log_timer = 0
@@ -170,7 +175,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             await event_wait(abort, 1)
 
         # finished
-        log.info('Moved to az=%.2f.', az)
+        log.info("Moved to az=%.2f.", az)
 
     @timeout(1200000)
     async def move_altaz(self, alt: float, az: float, **kwargs: Any) -> None:
@@ -194,7 +199,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         self._set_az = az
 
         # is this a larger move?
-        large_move = abs(az - self._azimuth) > 2. * self._tolerance
+        large_move = abs(az - self._azimuth) > 2.0 * self._tolerance
 
         # decide, whether we're tracking or just slewing
         tracking = self.is_following and not large_move
@@ -239,8 +244,13 @@ class AlpacaDome(FollowMixin, BaseDome):
         """
 
         # check that motion is not in one of the states listed below
-        states = [MotionStatus.PARKED, MotionStatus.INITIALIZING, MotionStatus.PARKING,
-                  MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        states = [
+            MotionStatus.PARKED,
+            MotionStatus.INITIALIZING,
+            MotionStatus.PARKING,
+            MotionStatus.ERROR,
+            MotionStatus.UNKNOWN,
+        ]
         return self._device.connected and await self.get_motion_status() not in states
 
     async def _update_status(self) -> None:
@@ -250,7 +260,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         while True:
             # get azimuth
             try:
-                self._azimuth = self._adjust_azimuth(await self._device.get('Azimuth'))
+                self._azimuth = self._adjust_azimuth(await self._device.get("Azimuth"))
             except ValueError:
                 # ignore it
                 pass
@@ -274,4 +284,4 @@ class AlpacaDome(FollowMixin, BaseDome):
         return az
 
 
-__all__ = ['AlpacaDome']
+__all__ = ["AlpacaDome"]
