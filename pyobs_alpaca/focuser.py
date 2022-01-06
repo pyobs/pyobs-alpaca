@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
-    __module__ = 'pyobs_alpaca'
+    __module__ = "pyobs_alpaca"
 
     def __init__(self, **kwargs: Any):
         Module.__init__(self, **kwargs)
@@ -23,14 +23,14 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         self._device = self.add_child_object(AlpacaDevice, **kwargs)
 
         # variables
-        self._focus_offset = 0.
+        self._focus_offset = 0.0
 
         # allow to abort motion
         self._lock_motion = asyncio.Lock()
         self._abort_motion = asyncio.Event()
 
         # init mixins
-        MotionStatusMixin.__init__(self, motion_status_interfaces=['IFocuser'])
+        MotionStatusMixin.__init__(self, motion_status_interfaces=["IFocuser"])
 
     async def open(self) -> None:
         """Open module."""
@@ -40,7 +40,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         await MotionStatusMixin.open(self)
 
         # init status
-        await self._change_motion_status(MotionStatus.IDLE, interface='IFocuser')
+        await self._change_motion_status(MotionStatus.IDLE, interface="IFocuser")
 
     async def init(self, **kwargs: Any) -> None:
         """Initialize device.
@@ -58,8 +58,9 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
         pass
 
-    async def get_fits_header_before(self, namespaces: Optional[List[str]] = None, **kwargs: Any) \
-            -> Dict[str, Tuple[Any, str]]:
+    async def get_fits_header_before(
+        self, namespaces: Optional[List[str]] = None, **kwargs: Any
+    ) -> Dict[str, Tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:
@@ -72,16 +73,14 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         # get pos and step size
         # StepSize is in microns, so multiply with 1000
         try:
-            pos = await self._device.get('Position')
-            step = await self._device.get('StepSize') * 1000.
+            pos = await self._device.get("Position")
+            step = await self._device.get("StepSize") * 1000.0
 
             # return header
-            return {
-                'TEL-FOCU': (pos / step, 'Focus of telescope [mm]')
-            }
+            return {"TEL-FOCU": (pos / step, "Focus of telescope [mm]")}
 
         except ValueError as e:
-            log.warning('Could not determine focus position: %s', e)
+            log.warning("Could not determine focus position: %s", e)
             return {}
 
     @timeout(60000)
@@ -124,27 +123,27 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         # acquire lock
         async with LockWithAbort(self._lock_motion, self._abort_motion):
             # get step size
-            step = await self._device.get('StepSize')
+            step = await self._device.get("StepSize")
 
             # calculating new focus and move it
-            log.info('Moving focus to %.2fmm...', focus)
-            await self._change_motion_status(MotionStatus.SLEWING, interface='IFocuser')
-            foc = int(focus * step * 1000.)
-            await self._device.put('Move', Position=foc)
+            log.info("Moving focus to %.2fmm...", focus)
+            await self._change_motion_status(MotionStatus.SLEWING, interface="IFocuser")
+            foc = int(focus * step * 1000.0)
+            await self._device.put("Move", Position=foc)
 
             # wait for it
-            while abs(await self._device.get('Position') - foc) > 10:
+            while abs(await self._device.get("Position") - foc) > 10:
                 # abort?
                 if self._abort_motion.is_set():
-                    log.warning('Setting focus aborted.')
+                    log.warning("Setting focus aborted.")
                     return
 
                 # sleep a little
                 await asyncio.sleep(0.1)
 
             # finished
-            log.info('Reached new focus of %.2fmm.', await self._device.get('Position') / step / 1000.)
-            await self._change_motion_status(MotionStatus.POSITIONED, interface='IFocuser')
+            log.info("Reached new focus of %.2fmm.", await self._device.get("Position") / step / 1000.0)
+            await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
 
     async def get_focus(self, **kwargs: Any) -> float:
         """Return current focus.
@@ -155,8 +154,8 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
 
         # get pos and step size
         # StepSize is in microns, so multiply with 1000
-        pos = float(await self._device.get('Position'))
-        step = float(await self._device.get('StepSize')) * 1000.
+        pos = float(await self._device.get("Position"))
+        step = float(await self._device.get("StepSize")) * 1000.0
 
         # return current focus - offset
         return pos / step - self._focus_offset
@@ -177,7 +176,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # stop motion
-        await self._device.put('Halt')
+        await self._device.put("Halt")
 
     async def is_ready(self, **kwargs: Any) -> bool:
         """Returns the device is "ready", whatever that means for the specific device.
@@ -187,9 +186,14 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """
 
         # check that motion is not in one of the states listed below
-        states = [MotionStatus.PARKED, MotionStatus.INITIALIZING, MotionStatus.PARKING,
-                  MotionStatus.ERROR, MotionStatus.UNKNOWN]
+        states = [
+            MotionStatus.PARKED,
+            MotionStatus.INITIALIZING,
+            MotionStatus.PARKING,
+            MotionStatus.ERROR,
+            MotionStatus.UNKNOWN,
+        ]
         return self._device.connected and await self.get_motion_status() not in states
 
 
-__all__ = ['AlpacaFocuser']
+__all__ = ["AlpacaFocuser"]

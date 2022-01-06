@@ -5,7 +5,7 @@ import aiohttp
 
 from pyobs.object import Object
 
-log = logging.getLogger('pyobs')
+log = logging.getLogger("pyobs")
 
 
 class ServerPutResponse(NamedTuple):
@@ -24,8 +24,16 @@ class ServerGetResponse(NamedTuple):
 
 
 class AlpacaDevice(Object):
-    def __init__(self, server: str, port: int, device_type: str, device: int, version: str = 'v1',
-                 alive_parameter: str = 'Connected', **kwargs: Any):
+    def __init__(
+        self,
+        server: str,
+        port: int,
+        device_type: str,
+        device: int,
+        version: str = "v1",
+        alive_parameter: str = "Connected",
+        **kwargs: Any,
+    ):
         """Initializes a new ASCOM Alpaca device.
 
         Args:
@@ -53,8 +61,8 @@ class AlpacaDevice(Object):
         self.add_background_task(self._check_connected_thread)
 
         # check version
-        if version != 'v1':
-            raise ValueError('Only Alpaca v1 is supported.')
+        if version != "v1":
+            raise ValueError("Only Alpaca v1 is supported.")
 
     @property
     def connected(self) -> bool:
@@ -67,7 +75,7 @@ class AlpacaDevice(Object):
         # check connected
         await self._check_connected()
         if not self._connected:
-            log.warning('Could not connect to ASCOM server.')
+            log.warning("Could not connect to ASCOM server.")
 
     async def _check_connected_thread(self) -> None:
         """Periodically check, whether we're connected to ASCOM."""
@@ -88,9 +96,9 @@ class AlpacaDevice(Object):
         # did it change?
         if connected != self._connected:
             if connected:
-                log.info('Connected to ASCOM server.')
+                log.info("Connected to ASCOM server.")
             else:
-                log.warning('Lost connection to ASCOM server.')
+                log.warning("Lost connection to ASCOM server.")
 
         # store new status
         self._connected = connected
@@ -104,8 +112,14 @@ class AlpacaDevice(Object):
         Returns:
             Full Alpaca URL
         """
-        return 'http://%s:%d/api/%s/%s/%d/%s' % (self._server, self._port, self._version,
-                                                 self._type, self._device, name.lower())
+        return "http://%s:%d/api/%s/%s/%d/%s" % (
+            self._server,
+            self._port,
+            self._version,
+            self._type,
+            self._device,
+            name.lower(),
+        )
 
     async def _get(self, name: str) -> Any:
         """Calls GET on Alpaca server, which returns value for variable with given name.
@@ -124,13 +138,13 @@ class AlpacaDevice(Object):
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=5) as response:
                 if response.status != 200:
-                    raise ValueError('Could not contact server.')
+                    raise ValueError("Could not contact server.")
                 json = await response.json()
                 resp = ServerGetResponse(**json)
 
         # check error
         if resp.ErrorNumber != 0:
-            raise ValueError('Server error: %s' % resp.ErrorMessage)
+            raise ValueError("Server error: %s" % resp.ErrorMessage)
 
         # return value
         return resp.Value
@@ -147,7 +161,7 @@ class AlpacaDevice(Object):
 
         # only do it, if connected
         if not self._connected:
-            raise ValueError('Not connected to ASCOM.')
+            raise ValueError("Not connected to ASCOM.")
         return await self._get(name)
 
     async def put(self, name: str, timeout: float = 5, **values: Any) -> None:
@@ -161,22 +175,22 @@ class AlpacaDevice(Object):
 
         # only do it, if connected
         if not self._connected:
-            raise ValueError('Not connected to ASCOM.')
+            raise ValueError("Not connected to ASCOM.")
 
         # get url
         url = self._build_alpaca_url(name)
 
         # request it
         async with aiohttp.ClientSession() as session:
-            async with session.put(url, data=values, timeout=5) as response:
+            async with session.put(url, data=values, timeout=timeout) as response:
                 if response.status != 200:
-                    raise ValueError('Could not contact server.')
+                    raise ValueError("Could not contact server.")
                 json = await response.json()
                 resp = ServerPutResponse(**json)
 
         # check error
         if resp.ErrorNumber != 0:
-            raise ValueError('Server error: %s' % resp.ErrorMessage)
+            raise ValueError("Server error: %s" % resp.ErrorMessage)
 
 
-__all__ = ['AlpacaDevice']
+__all__ = ["AlpacaDevice"]
