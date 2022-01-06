@@ -182,7 +182,7 @@ class AlpacaDevice(Object):
 
         # request it
         async with aiohttp.ClientSession() as session:
-            async with session.put(url, data=values, timeout=5) as response:
+            async with session.put(url, data=values, timeout=timeout) as response:
                 if response.status != 200:
                     raise ValueError("Could not contact server.")
                 json = await response.json()
