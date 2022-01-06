@@ -137,6 +137,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
             # park telescope
             try:
+                # TODO: add abort event
                 await self._device.put("Park", timeout=60)
                 await self._change_motion_status(MotionStatus.PARKED)
                 log.info("Telescope parked.")
@@ -167,7 +168,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
             # wait for it
             while await self._device.get("Slewing"):
-                await event_wait(abort_event, 1)
+                if not await event_wait(abort_event, 1):
+                    log.info("Alt/Az movement aborted.")
+                    return
+
             await self._device.put("Tracking", Tracking=False)
 
             # wait settle time
@@ -199,7 +203,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
             # wait for it
             while await self._device.get("Slewing"):
-                await event_wait(abort_event, 1)
+                if not await event_wait(abort_event, 1):
+                    log.info("RA/Dec movement aborted.")
+                    return
             await self._device.put("Tracking", Tracking=True)
 
             # wait settle time
@@ -250,7 +256,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
                 # wait for it
                 while await self._device.get("Slewing"):
-                    await event_wait(self._abort_move, 1)
+                    if not await event_wait(self._abort_move, 1):
+                        log.info("RA/Dec offset movement aborted.")
+                        return
+
                 await self._device.put("Tracking", Tracking=True)
 
                 # wait settle time
