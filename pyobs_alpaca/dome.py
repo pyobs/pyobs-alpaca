@@ -182,7 +182,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         while 180 - abs(abs(az - self._azimuth) - 180) > self._tolerance:
             # abort?
             if abort.is_set():
-                raise exc.AbortedError("Moving dome aborted.")
+                raise InterruptedError("Moving dome aborted.")
 
             # log?
             if log_timer == 0:

@@ -170,7 +170,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # wait for it
             while await self._device.get("Slewing"):
                 if not await event_wait(abort_event, 1):
-                    raise exc.AbortedError("Alt/Az movement aborted.")
+                    raise InterruptedError("Alt/Az movement aborted.")
 
             await self._device.put("Tracking", Tracking=False)
 
@@ -205,7 +205,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # wait for it
             while await self._device.get("Slewing"):
                 if not await event_wait(abort_event, 1):
-                    raise exc.AbortedError("RA/Dec movement aborted.")
+                    raise InterruptedError("RA/Dec movement aborted.")
             await self._device.put("Tracking", Tracking=True)
 
             # wait settle time

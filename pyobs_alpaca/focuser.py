@@ -141,7 +141,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
                     if self._abort_motion.is_set():
                         await self._device.put("Halt")
                         await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
-                        raise exc.AbortedError("Setting focus aborted.")
+                        raise InterruptedError("Setting focus aborted.")
 
                     # sleep a little
                     await asyncio.sleep(0.1)
