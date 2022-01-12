@@ -90,7 +90,7 @@ class AlpacaDevice(Object):
         try:
             await self._get(self._alive_param)
             connected = True
-        except ValueError:
+        except ConnectionError:
             connected = False
 
         # did it change?
@@ -129,22 +129,32 @@ class AlpacaDevice(Object):
 
         Returns:
             Value of variable.
+
+        Raises:
+            ConnectionError: If an error occurred.
         """
 
         # get url
         url = self._build_alpaca_url(name)
 
         # request it
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=5) as response:
-                if response.status != 200:
-                    raise ValueError("Could not contact server.")
-                json = await response.json()
-                resp = ServerGetResponse(**json)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=5) as response:
+                    if response.status != 200:
+                        raise ConnectionError(
+                            f"ALPACA server responded with error {response.status}: {await response.text()}."
+                        )
+                    json = await response.json()
+                    resp = ServerGetResponse(**json)
+
+        except asyncio.TimeoutError:
+            # raise a ConnectionError instead
+            raise ConnectionError("Connection to ALPACA server timed out.")
 
         # check error
         if resp.ErrorNumber != 0:
-            raise ValueError("Server error: %s" % resp.ErrorMessage)
+            raise ConnectionError("Server error: %s" % resp.ErrorMessage)
 
         # return value
         return resp.Value
@@ -157,11 +167,14 @@ class AlpacaDevice(Object):
 
         Returns:
             Value of variable.
+
+        Raises:
+            ConnectionError: If an error occurred.
         """
 
         # only do it, if connected
         if not self._connected:
-            raise ValueError("Not connected to ASCOM.")
+            raise ConnectionError("Not connected to ASCOM.")
         return await self._get(name)
 
     async def put(self, name: str, timeout: float = 5, **values: Any) -> None:
@@ -171,26 +184,36 @@ class AlpacaDevice(Object):
             name: Name of variable.
             timeout: Time in sec for request.
             values: Values to set.
+
+        Raises:
+            ConnectionError: If an error occurred.
         """
 
         # only do it, if connected
         if not self._connected:
-            raise ValueError("Not connected to ASCOM.")
+            raise ConnectionError("Not connected to ASCOM.")
 
         # get url
         url = self._build_alpaca_url(name)
 
         # request it
-        async with aiohttp.ClientSession() as session:
-            async with session.put(url, data=values, timeout=timeout) as response:
-                if response.status != 200:
-                    raise ValueError("Could not contact server.")
-                json = await response.json()
-                resp = ServerPutResponse(**json)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(url, data=values, timeout=timeout) as response:
+                    if response.status != 200:
+                        raise ConnectionError(
+                            f"ALPACA server responded with error {response.status}: {await response.text()}."
+                        )
+                    json = await response.json()
+                    resp = ServerPutResponse(**json)
+
+        except asyncio.TimeoutError:
+            # raise a ConnectionError instead
+            raise ConnectionError("Connection to ALPACA server timed out.")
 
         # check error
         if resp.ErrorNumber != 0:
-            raise ValueError("Server error: %s" % resp.ErrorMessage)
+            raise ConnectionError("Server error: %s" % resp.ErrorMessage)
 
 
 __all__ = ["AlpacaDevice"]

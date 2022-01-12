@@ -11,6 +11,7 @@ from pyobs.modules.telescope.basetelescope import BaseTelescope
 from pyobs.utils.enums import MotionStatus
 from pyobs.utils.parallel import event_wait
 from pyobs.utils.threads import LockWithAbort
+from pyobs.utils import exceptions as exc
 from .device import AlpacaDevice
 
 log = logging.getLogger("pyobs")
@@ -67,7 +68,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             else:
                 return MotionStatus.IDLE
 
-        except ValueError:
+        except ConnectionError:
             return MotionStatus.UNKNOWN
 
     async def _check_status_thread(self) -> None:
@@ -86,7 +87,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """Initialize telescope.
 
         Raises:
-            ValueError: If telescope could not be initialized.
+            InitError: If telescope could not be initialized.
         """
 
         # if already initializing, ignore
@@ -97,7 +98,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         async with LockWithAbort(self._lock_moving, self._abort_move):
             # not connected
             if not self._device.connected:
-                raise ValueError("Not connected to ASCOM.")
+                raise exc.InitError("Not connected to ASCOM.")
 
             # change status
             log.info("Initializing telescope...")
@@ -109,16 +110,16 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
                 await self._change_motion_status(MotionStatus.IDLE)
                 log.info("Telescope initialized.")
 
-            except ValueError:
+            except ConnectionError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
-                raise ValueError("Could not init telescope.")
+                raise exc.InitError("Could not init telescope.")
 
     @timeout(60000)
     async def park(self, **kwargs: Any) -> None:
         """Park telescope.
 
         Raises:
-            ValueError: If telescope could not be parked.
+            ParkError: If telescope could not be parked.
         """
 
         # if already parking, ignore
@@ -129,7 +130,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         async with LockWithAbort(self._lock_moving, self._abort_move):
             # not connected
             if not self._device.connected:
-                raise ValueError("Not connected to ASCOM.")
+                raise exc.ParkError("Not connected to ASCOM.")
 
             # change status
             log.info("Parking telescope...")
@@ -142,9 +143,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
                 await self._change_motion_status(MotionStatus.PARKED)
                 log.info("Telescope parked.")
 
-            except ValueError:
+            except ConnectionError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
-                raise ValueError("Could not park telescope.")
+                raise exc.ParkError("Could not park telescope.")
 
     async def _move_altaz(self, alt: float, az: float, abort_event: asyncio.Event) -> None:
         """Actually moves to given coordinates. Must be implemented by derived classes.
@@ -169,17 +170,17 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # wait for it
             while await self._device.get("Slewing"):
                 if not await event_wait(abort_event, 1):
-                    log.info("Alt/Az movement aborted.")
-                    return
+                    raise exc.AbortedError("Alt/Az movement aborted.")
 
             await self._device.put("Tracking", Tracking=False)
 
             # wait settle time
             await event_wait(abort_event, self._settle_time)
 
-        except ValueError:
+        except ConnectionError:
             await self._change_motion_status(MotionStatus.UNKNOWN)
-            raise ValueError("Could not move telescope to Alt/Az.")
+            await self.stop_motion()
+            raise exc.MoveError("Could not move telescope to Alt/Az.")
 
     async def _move_radec(self, ra: float, dec: float, abort_event: asyncio.Event) -> None:
         """Actually starts tracking on given coordinates. Must be implemented by derived classes.
@@ -204,16 +205,16 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # wait for it
             while await self._device.get("Slewing"):
                 if not await event_wait(abort_event, 1):
-                    log.info("RA/Dec movement aborted.")
-                    return
+                    raise exc.AbortedError("RA/Dec movement aborted.")
             await self._device.put("Tracking", Tracking=True)
 
             # wait settle time
             await event_wait(abort_event, self._settle_time)
 
-        except ValueError:
+        except ConnectionError:
             await self._change_motion_status(MotionStatus.UNKNOWN)
-            raise ValueError("Could not move telescope to RA/Dec.")
+            await self.stop_motion()
+            raise exc.MoveError("Could not move telescope to RA/Dec.")
 
     @timeout(10000)
     async def set_offsets_radec(self, dra: float, ddec: float, **kwargs: Any) -> None:
@@ -224,14 +225,14 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             ddec: Dec offset in degrees.
 
         Raises:
-            ValueError: If offset could not be set.
+            MoveError: If offset could not be set.
         """
 
         # acquire lock
         async with LockWithAbort(self._lock_moving, self._abort_move):
             # not connected
             if not self._device.connected:
-                raise ValueError("Not connected to ASCOM.")
+                raise exc.MoveError("Not connected to ASCOM.")
 
             # start slewing
             await self._change_motion_status(MotionStatus.SLEWING)
@@ -269,9 +270,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
                 await self._change_motion_status(MotionStatus.TRACKING)
                 log.info("Reached destination.")
 
-            except ValueError:
+            except ConnectionError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
-                raise ValueError("Could not move telescope to RA/Dec offset.")
+                raise exc.MoveError("Could not move telescope to RA/Dec offset.")
 
     async def get_offsets_radec(self, **kwargs: Any) -> Tuple[float, float]:
         """Get RA/Dec offset.
@@ -298,7 +299,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # return coordinates without offsets
             return float(ra * 15 - ra_off), float(dec - self._offset_dec)
 
-        except ValueError:
+        except ConnectionError:
             raise ValueError("Could not fetch Alt/Az.")
 
     async def get_altaz(self, **kwargs: Any) -> Tuple[float, float]:
@@ -317,7 +318,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # create sky coordinates
             return await self._device.get("Altitude"), az
 
-        except ValueError:
+        except ConnectionError:
             raise ValueError("Could not fetch Alt/Az.")
 
     async def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
@@ -334,9 +335,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             await self._device.put("Tracking", Tracking=False)
             await self._change_motion_status(MotionStatus.IDLE)
 
-        except ValueError:
+        except ConnectionError:
             await self._change_motion_status(MotionStatus.UNKNOWN)
-            raise ValueError("Could not stop telescope.")
+            raise exc.MoveError("Could not stop telescope.")
 
     async def is_ready(self, **kwargs: Any) -> bool:
         """Returns the device is "ready", whatever that means for the specific device.
@@ -390,7 +391,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # return it
             return self._filter_fits_namespace(hdr, namespaces=namespaces, **kwargs)
 
-        except ValueError:
+        except ConnectionError:
             return {}
 
 

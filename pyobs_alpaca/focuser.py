@@ -8,6 +8,7 @@ from pyobs.mixins import MotionStatusMixin
 from pyobs.modules import timeout
 from pyobs.utils.enums import MotionStatus
 from pyobs.utils.threads import LockWithAbort
+from pyobs.utils import exceptions as exc
 from .device import AlpacaDevice
 
 log = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """Initialize device.
 
         Raises:
-            ValueError: If device could not be initialized.
+            InitError: If device could not be initialized.
         """
         pass
 
@@ -54,7 +55,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """Park device.
 
         Raises:
-            ValueError: If device could not be parked.
+            ParkError: If device could not be parked.
         """
         pass
 
@@ -79,7 +80,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
             # return header
             return {"TEL-FOCU": (pos / step, "Focus of telescope [mm]")}
 
-        except ValueError as e:
+        except ConnectionError as e:
             log.warning("Could not determine focus position: %s", e)
             return {}
 
@@ -87,11 +88,13 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
     async def set_focus(self, focus: float, **kwargs: Any) -> None:
         """Sets new focus.
 
-        Args:
-            focus: New focus value.
+        Raises:
+            MoveError: If telescope cannot be moved.
+            AbortedError: If movement was aborted.
         """
 
         # set focus + offset
+
         await self._set_focus(focus + self._focus_offset)
 
     async def set_focus_offset(self, offset: float, **kwargs: Any) -> None:
@@ -122,28 +125,34 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
 
         # acquire lock
         async with LockWithAbort(self._lock_motion, self._abort_motion):
-            # get step size
-            step = await self._device.get("StepSize")
+            try:
+                # get step size
+                step = await self._device.get("StepSize")
 
-            # calculating new focus and move it
-            log.info("Moving focus to %.2fmm...", focus)
-            await self._change_motion_status(MotionStatus.SLEWING, interface="IFocuser")
-            foc = int(focus * step * 1000.0)
-            await self._device.put("Move", Position=foc)
+                # calculating new focus and move it
+                log.info("Moving focus to %.2fmm...", focus)
+                await self._change_motion_status(MotionStatus.SLEWING, interface="IFocuser")
+                foc = int(focus * step * 1000.0)
+                await self._device.put("Move", Position=foc)
 
-            # wait for it
-            while abs(await self._device.get("Position") - foc) > 10:
-                # abort?
-                if self._abort_motion.is_set():
-                    log.warning("Setting focus aborted.")
-                    return
+                # wait for it
+                while abs(await self._device.get("Position") - foc) > 10:
+                    # abort?
+                    if self._abort_motion.is_set():
+                        await self._device.put("Halt")
+                        await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
+                        raise exc.AbortedError("Setting focus aborted.")
 
-                # sleep a little
-                await asyncio.sleep(0.1)
+                    # sleep a little
+                    await asyncio.sleep(0.1)
 
-            # finished
-            log.info("Reached new focus of %.2fmm.", await self._device.get("Position") / step / 1000.0)
-            await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
+                # finished
+                log.info("Reached new focus of %.2fmm.", await self._device.get("Position") / step / 1000.0)
+                await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
+
+            except ConnectionError:
+                await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                raise exc.MoveError("Could not move focus.")
 
     async def get_focus(self, **kwargs: Any) -> float:
         """Return current focus.
