@@ -167,7 +167,6 @@ class AlpacaDome(FollowMixin, BaseDome):
 
         Raises:
             MoveError: If dome cannot be moved.
-            AbortedError: If movement was aborted.
         """
 
         # execute command

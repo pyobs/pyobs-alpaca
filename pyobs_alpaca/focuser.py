@@ -90,7 +90,6 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
 
         Raises:
             MoveError: If telescope cannot be moved.
-            AbortedError: If movement was aborted.
         """
 
         # set focus + offset
