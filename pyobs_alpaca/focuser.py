@@ -33,6 +33,9 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         # init mixins
         MotionStatusMixin.__init__(self, motion_status_interfaces=["IFocuser"])
 
+        # register exception
+        exc.register_exception(exc.MotionError, 3, timespan=600, callback=self._default_remote_error_callback)
+
     async def open(self) -> None:
         """Open module."""
         await Module.open(self)
