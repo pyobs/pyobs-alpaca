@@ -10,6 +10,7 @@ from pyobs.modules.roof import BaseDome
 from pyobs.utils.enums import MotionStatus
 from pyobs.utils.parallel import event_wait
 from pyobs.utils.threads import LockWithAbort
+from pyobs.utils import exceptions as exc
 from .device import AlpacaDevice
 
 log = logging.getLogger("pyobs")
@@ -67,7 +68,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """Open dome.
 
         Raises:
-            ValueError: If dome cannot be opened.
+            InitError: If dome cannot be opened.
         """
 
         # if already opening, ignore
@@ -81,7 +82,11 @@ class AlpacaDome(FollowMixin, BaseDome):
             await self._change_motion_status(MotionStatus.INITIALIZING)
 
             # execute command
-            await self._device.put("OpenShutter")
+            try:
+                await self._device.put("OpenShutter")
+            except ConnectionError:
+                await self._change_motion_status(MotionStatus.UNKNOWN)
+                raise exc.InitError("Could not open dome.")
 
             # wait for it
             status = None
@@ -94,7 +99,11 @@ class AlpacaDome(FollowMixin, BaseDome):
 
                 # wait a little and update
                 await event_wait(self._abort_shutter, 1)
-                status = await self._device.get("ShutterStatus")
+                try:
+                    status = await self._device.get("ShutterStatus")
+                except ConnectionError:
+                    await self._change_motion_status(MotionStatus.UNKNOWN)
+                    raise exc.InitError("Could not open dome.")
 
             # set new status
             log.info("Dome opened.")
@@ -106,7 +115,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """Close dome.
 
         Raises:
-            ValueError: If dome cannot be opened.
+            ParkError: If dome cannot be opened.
         """
 
         # if already closing, ignore
@@ -121,8 +130,12 @@ class AlpacaDome(FollowMixin, BaseDome):
             await self.comm.send_event(RoofClosingEvent())
 
             # send command for closing shutter and rotate to South
-            await self._device.put("CloseShutter")
-            await self._device.put("SlewToAzimuth", Azimuth=0)
+            try:
+                await self._device.put("CloseShutter")
+                await self._device.put("SlewToAzimuth", Azimuth=0)
+            except ConnectionError:
+                await self._change_motion_status(MotionStatus.UNKNOWN)
+                raise exc.ParkError("Could not close dome.")
 
             # wait for it
             status = None
@@ -131,11 +144,15 @@ class AlpacaDome(FollowMixin, BaseDome):
                 if status == 4:
                     log.error("Could not close dome.")
                     await self._change_motion_status(MotionStatus.UNKNOWN)
-                    return
+                    raise exc.ParkError("Could not close dome.")
 
                 # wait a little and update
                 await event_wait(self._abort_shutter, 1)
-                status = await self._device.get("ShutterStatus")
+                try:
+                    status = await self._device.get("ShutterStatus")
+                except ConnectionError:
+                    await self._change_motion_status(MotionStatus.UNKNOWN)
+                    raise exc.ParkError("Could not close dome.")
 
             # set new status
             log.info("Dome closed.")
@@ -147,17 +164,24 @@ class AlpacaDome(FollowMixin, BaseDome):
         Args:
             az: Azimuth to move to.
             abort: Abort event.
+
+        Raises:
+            MoveError: If dome cannot be moved.
         """
 
         # execute command
-        await self._device.put("SlewToAzimuth", Azimuth=self._adjust_azimuth(az))
+        try:
+            await self._device.put("SlewToAzimuth", Azimuth=self._adjust_azimuth(az))
+        except ConnectionError:
+            await self._change_motion_status(MotionStatus.UNKNOWN)
+            raise exc.MoveError("Could not move dome.")
 
         # wait for it
         log_timer = 0
         while 180 - abs(abs(az - self._azimuth) - 180) > self._tolerance:
             # abort?
             if abort.is_set():
-                return
+                raise InterruptedError("Moving dome aborted.")
 
             # log?
             if log_timer == 0:
@@ -186,7 +210,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             az: Az in deg to move to.
 
         Raises:
-            ValueError: If device could not move.
+            MoveError: If device could not be moved.
         """
 
         # do nothing, if not ready
@@ -261,7 +285,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             # get azimuth
             try:
                 self._azimuth = self._adjust_azimuth(await self._device.get("Azimuth"))
-            except ValueError:
+            except ConnectionError:
                 # ignore it
                 pass
 
