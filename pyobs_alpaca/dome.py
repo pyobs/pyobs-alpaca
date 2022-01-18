@@ -68,7 +68,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """Open dome.
 
         Raises:
-            InitError: If dome cannot be opened.
+            pyobs.utils.exceptions.InitError: If dome cannot be opened.
         """
 
         # if already opening, ignore
@@ -115,7 +115,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """Close dome.
 
         Raises:
-            ParkError: If dome cannot be opened.
+            pyobs.utils.exceptions.ParkError: If dome cannot be opened.
         """
 
         # if already closing, ignore
@@ -166,7 +166,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             abort: Abort event.
 
         Raises:
-            MoveError: If dome cannot be moved.
+            pyobs.utils.exceptions.MoveError: If dome cannot be moved.
         """
 
         # execute command
@@ -210,7 +210,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             az: Az in deg to move to.
 
         Raises:
-            MoveError: If device could not be moved.
+            pyobs.utils.exceptions.MoveError: If device could not be moved.
         """
 
         # do nothing, if not ready

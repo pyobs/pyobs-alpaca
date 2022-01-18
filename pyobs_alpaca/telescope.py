@@ -87,7 +87,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """Initialize telescope.
 
         Raises:
-            InitError: If telescope could not be initialized.
+            pyobs.utils.exceptions.InitError: If telescope could not be initialized.
         """
 
         # if already initializing, ignore
@@ -119,7 +119,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """Park telescope.
 
         Raises:
-            ParkError: If telescope could not be parked.
+            pyobs.utils.exceptions.ParkError: If telescope could not be parked.
         """
 
         # if already parking, ignore
@@ -156,7 +156,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             abort_event: Event that gets triggered when movement should be aborted.
 
         Raises:
-            Exception: On error.
+            pyobs.utils.exceptions.MoveError: If telescope cannot be moved.
         """
 
         # reset offsets
@@ -191,7 +191,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             abort_event: Event that gets triggered when movement should be aborted.
 
         Raises:
-            Exception: On any error.
+            pyobs.utils.exceptions.MoveError: If telescope cannot be moved.
         """
 
         # reset offsets
@@ -225,7 +225,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             ddec: Dec offset in degrees.
 
         Raises:
-            MoveError: If offset could not be set.
+            pyobs.utils.exceptions.MoveError: If offset could not be set.
         """
 
         # acquire lock

@@ -50,7 +50,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """Initialize device.
 
         Raises:
-            InitError: If device could not be initialized.
+            pyobs.utils.exceptions.InitError: If device could not be initialized.
         """
         pass
 
@@ -58,7 +58,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """Park device.
 
         Raises:
-            ParkError: If device could not be parked.
+            pyobs.utils.exceptions.ParkError: If device could not be parked.
         """
         pass
 
@@ -92,7 +92,7 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         """Sets new focus.
 
         Raises:
-            MoveError: If telescope cannot be moved.
+            pyobs.utils.exceptions.MoveError: If telescope cannot be moved.
         """
 
         # set focus + offset
