@@ -169,7 +169,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
             # wait for it
             while await self._device.get("Slewing"):
-                if not await event_wait(abort_event, 1):
+                if await event_wait(abort_event, 1):
                     raise InterruptedError("Alt/Az movement aborted.")
 
             await self._device.put("Tracking", Tracking=False)
@@ -204,7 +204,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
             # wait for it
             while await self._device.get("Slewing"):
-                if not await event_wait(abort_event, 1):
+                if await event_wait(abort_event, 1):
                     raise InterruptedError("RA/Dec movement aborted.")
             await self._device.put("Tracking", Tracking=True)
 
@@ -257,7 +257,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
                 # wait for it
                 while await self._device.get("Slewing"):
-                    if not await event_wait(self._abort_move, 1):
+                    if await event_wait(self._abort_move, 1):
                         log.info("RA/Dec offset movement aborted.")
                         return
 
