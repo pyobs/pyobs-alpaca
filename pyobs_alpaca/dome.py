@@ -71,6 +71,10 @@ class AlpacaDome(FollowMixin, BaseDome):
             pyobs.utils.exceptions.InitError: If dome cannot be opened.
         """
 
+        # weather?
+        if not self.is_weather_good():
+            raise exc.InitError("Weather seems to be bad.")
+
         # if already opening, ignore
         if await self.get_motion_status() == MotionStatus.INITIALIZING:
             return
