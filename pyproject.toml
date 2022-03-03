@@ -9,7 +9,7 @@ license = "MIT"
 python = ">=3.9,<3.11"
 numpy = "^1.22.1"
 single-source = "^0.2.0"
-pyobs-core="^0.16"
+pyobs-core=">=0.16"
 
 [tool.poetry.dev-dependencies]
 black = "^21.12b0"
