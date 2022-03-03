@@ -92,6 +92,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             pyobs.utils.exceptions.InitError: If telescope could not be initialized.
         """
 
+        # weather?
+        if not self.is_weather_good():
+            raise exc.InitError("Weather seems to be bad.")
+
         # if already initializing, ignore
         if await self.get_motion_status() == MotionStatus.INITIALIZING:
             return
