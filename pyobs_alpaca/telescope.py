@@ -9,7 +9,7 @@ from pyobs.interfaces import IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget
 from pyobs.modules import timeout
 from pyobs.modules.telescope.basetelescope import BaseTelescope
 from pyobs.utils.enums import MotionStatus
-from pyobs.utils.parallel import event_wait
+from pyobs.utils.parallel import event_wait, acquire_lock
 from pyobs.utils.threads import LockWithAbort
 from pyobs.utils import exceptions as exc
 from .device import AlpacaDevice
@@ -20,11 +20,12 @@ log = logging.getLogger("pyobs")
 class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, settle_time: float = 3.0, **kwargs: Any):
+    def __init__(self, settle_time: float = 3.0, park_position: Tuple[float, float] = (180.0, 15.0), **kwargs: Any):
         """Initializes a new ASCOM Alpaca telescope.
 
         Args:
             settle_time: Time in seconds to wait after slew before finishing.
+            park_position: Alt/Az park position
         """
         BaseTelescope.__init__(self, **kwargs, motion_status_interfaces=["ITelescope"])
 
@@ -33,6 +34,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
         # variables
         self._settle_time = settle_time
+        self._park_position = park_position
 
         # offsets in ra/dec
         self._offset_ra = 0.0
@@ -114,6 +116,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
                 await self._change_motion_status(MotionStatus.UNKNOWN)
                 raise exc.InitError("Could not init telescope.")
 
+            except InterruptedError:
+                await self._change_motion_status(MotionStatus.UNKNOWN)
+
     @timeout(60000)
     async def park(self, **kwargs: Any) -> None:
         """Park telescope.
@@ -138,7 +143,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
             # park telescope
             try:
-                # TODO: add abort event
+                # first move the telescope to its park position, which can be aborted
+                await self._move_altaz(self._park_position[1], self._park_position[0], self._abort_move)
+
+                # then actually park
                 await self._device.put("Park", timeout=60)
                 await self._change_motion_status(MotionStatus.PARKED)
                 log.info("Telescope parked.")
@@ -146,6 +154,9 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             except ConnectionError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
                 raise exc.ParkError("Could not park telescope.")
+
+            except InterruptedError:
+                await self._change_motion_status(MotionStatus.UNKNOWN)
 
     async def _move_altaz(self, alt: float, az: float, abort_event: asyncio.Event) -> None:
         """Actually moves to given coordinates. Must be implemented by derived classes.
@@ -228,8 +239,17 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             pyobs.utils.exceptions.MoveError: If offset could not be set.
         """
 
-        # acquire lock
-        async with LockWithAbort(self._lock_moving, self._abort_move):
+        # need to be tracking to set offset
+        if await self.get_motion_status() != MotionStatus.TRACKING:
+            log.warning("Can only set offset when tracking.")
+            return
+
+        # try to acquire lock
+        if not await acquire_lock(self._lock_moving, 5):
+            log.warning("Could not acquire lock for setting offset.")
+            return
+
+        try:
             # not connected
             if not self._device.connected:
                 raise exc.MoveError("Not connected to ASCOM.")
@@ -250,33 +270,34 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             ra += float(self._offset_ra / np.cos(np.radians(dec)))
             dec += float(self._offset_dec)
 
-            try:
-                # start slewing
-                await self._device.put("Tracking", Tracking=True)
-                await self._device.put("SlewToCoordinatesAsync", RightAscension=ra / 15.0, Declination=dec)
+            # start slewing
+            await self._device.put("Tracking", Tracking=True)
+            await self._device.put("SlewToCoordinatesAsync", RightAscension=ra / 15.0, Declination=dec)
 
-                # wait for it
-                while await self._device.get("Slewing"):
-                    if await event_wait(self._abort_move, 1):
-                        log.info("RA/Dec offset movement aborted.")
-                        return
+            # wait for it
+            while await self._device.get("Slewing"):
+                if await event_wait(self._abort_move, 1):
+                    log.info("RA/Dec offset movement aborted.")
+                    return
 
-                await self._device.put("Tracking", Tracking=True)
+            await self._device.put("Tracking", Tracking=True)
 
-                # wait settle time
-                await event_wait(self._abort_move, self._settle_time)
+            # wait settle time
+            await event_wait(self._abort_move, self._settle_time)
 
-                # finish slewing
-                await self._change_motion_status(MotionStatus.TRACKING)
-                log.info("Reached destination.")
+            # finish slewing
+            await self._change_motion_status(MotionStatus.TRACKING)
+            log.info("Reached destination.")
 
-            except ConnectionError:
-                await self._change_motion_status(MotionStatus.UNKNOWN)
-                raise exc.MoveError("Could not move telescope to RA/Dec offset.")
+        except ConnectionError:
+            await self._change_motion_status(MotionStatus.UNKNOWN)
+            raise exc.MoveError("Could not move telescope to RA/Dec offset.")
+
+        finally:
+            self._lock_moving.release()
 
     async def get_offsets_radec(self, **kwargs: Any) -> Tuple[float, float]:
         """Get RA/Dec offset.
-
         Returns:
             Tuple with RA and Dec offsets.
         """
