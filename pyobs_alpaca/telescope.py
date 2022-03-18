@@ -97,7 +97,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             raise exc.InitError("Weather seems to be bad.")
 
         # if already initializing, ignore
-        if await self.get_motion_status() == MotionStatus.INITIALIZING:
+        if await self.get_motion_status() in [MotionStatus.INITIALIZING, MotionStatus.ERROR]:
             return
 
         # acquire lock
@@ -132,7 +132,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         """
 
         # if already parking, ignore
-        if await self.get_motion_status() == MotionStatus.PARKING:
+        if await self.get_motion_status() == [MotionStatus.PARKING, MotionStatus.ERROR]:
             return
 
         # acquire lock
