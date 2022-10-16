@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Tuple, Optional, Any
 
 from pyobs.events import RoofOpenedEvent, RoofClosingEvent
@@ -63,6 +64,14 @@ class AlpacaDome(FollowMixin, BaseDome):
         # init status to IDLE
         await self._change_motion_status(MotionStatus.IDLE)
 
+    async def _send_open_dome(self) -> None:
+        """Send command to open dome."""
+        try:
+            await self._device.put("OpenShutter")
+        except ConnectionError:
+            await self._change_motion_status(MotionStatus.UNKNOWN)
+            raise exc.InitError("Could not open dome.")
+
     @timeout(1200000)
     async def init(self, **kwargs: Any) -> None:
         """Open dome.
@@ -86,11 +95,8 @@ class AlpacaDome(FollowMixin, BaseDome):
             await self._change_motion_status(MotionStatus.INITIALIZING)
 
             # execute command
-            try:
-                await self._device.put("OpenShutter")
-            except ConnectionError:
-                await self._change_motion_status(MotionStatus.UNKNOWN)
-                raise exc.InitError("Could not open dome.")
+            await self._send_open_dome()
+            time_attempt = time.time()
 
             # wait for it
             status = None
@@ -109,10 +115,24 @@ class AlpacaDome(FollowMixin, BaseDome):
                     await self._change_motion_status(MotionStatus.UNKNOWN)
                     raise exc.InitError("Could not open dome.")
 
+                # waited >10s?
+                if time.time() - time_attempt > 10:
+                    await self._send_open_dome()
+                    time_attempt = time.time()
+
             # set new status
             log.info("Dome opened.")
             await self._change_motion_status(MotionStatus.POSITIONED)
             await self.comm.send_event(RoofOpenedEvent())
+
+    async def _send_close_dome(self) -> None:
+        """Send command to open dome."""
+        try:
+            await self._device.put("CloseShutter")
+            await self._device.put("SlewToAzimuth", Azimuth=0)
+        except ConnectionError:
+            await self._change_motion_status(MotionStatus.UNKNOWN)
+            raise exc.ParkError("Could not close dome.")
 
     @timeout(1200000)
     async def park(self, **kwargs: Any) -> None:
@@ -134,12 +154,8 @@ class AlpacaDome(FollowMixin, BaseDome):
             await self.comm.send_event(RoofClosingEvent())
 
             # send command for closing shutter and rotate to South
-            try:
-                await self._device.put("CloseShutter")
-                await self._device.put("SlewToAzimuth", Azimuth=0)
-            except ConnectionError:
-                await self._change_motion_status(MotionStatus.UNKNOWN)
-                raise exc.ParkError("Could not close dome.")
+            await self._send_close_dome()
+            time_attempt = time.time()
 
             # wait for it
             status = None
@@ -157,6 +173,11 @@ class AlpacaDome(FollowMixin, BaseDome):
                 except ConnectionError:
                     await self._change_motion_status(MotionStatus.UNKNOWN)
                     raise exc.ParkError("Could not close dome.")
+
+                # waited >10s?
+                if time.time() - time_attempt > 10:
+                    await self._send_close_dome()
+                    time_attempt = time.time()
 
             # set new status
             log.info("Dome closed.")
