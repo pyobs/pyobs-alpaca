@@ -6,7 +6,7 @@ authors = ["Tim-Oliver Husser <thusser@uni-goettingen.de>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"
+python = ">=3.9,<3.12"
 numpy = "^1.22"
 single-source = "^0.2"
 pyobs-core="^1.0"
