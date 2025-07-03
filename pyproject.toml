@@ -1,6 +1,6 @@
 [project]
 name = "pyobs-alpaca"
-version = "1.1.0"
+version = "1.1.1"
 description = "pyobs module for ASCOM Alpaca"
 authors = [{ name = "Tim-Oliver Husser", email = "thusser@uni-goettingen.de" }]
 requires-python = ">=3.11"
