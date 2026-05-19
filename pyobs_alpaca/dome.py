@@ -123,7 +123,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             # set new status
             log.info("Dome opened.")
             await self._change_motion_status(MotionStatus.POSITIONED)
-            await self._comm.send_event(RoofOpenedEvent())
+            await self.comm.send_event(RoofOpenedEvent())
 
     async def _send_close_dome(self) -> None:
         """Send command to open dome."""
@@ -151,7 +151,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             # log
             log.info("Closing dome...")
             await self._change_motion_status(MotionStatus.PARKING)
-            await self._comm.send_event(RoofClosingEvent())
+            await self.comm.send_event(RoofClosingEvent())
 
             # send command for closing shutter and rotate to South
             await self._send_close_dome()

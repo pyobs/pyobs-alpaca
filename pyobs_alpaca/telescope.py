@@ -261,7 +261,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             # start slewing
             await self._change_motion_status(MotionStatus.SLEWING)
             log.info('Setting telescope offsets to dRA=%.2f", dDec=%.2f"...', dra * 3600.0, ddec * 3600.0)
-            await self._comm.send_event(OffsetsRaDecEvent(ra=dra, dec=ddec))
+            await self.comm.send_event(OffsetsRaDecEvent(ra=dra, dec=ddec))
 
             # get current coordinates (with old offsets)
             ra, dec = await self.get_radec()
