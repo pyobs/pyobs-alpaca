@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Any
 import numpy as np
 
 from pyobs.events import OffsetsRaDecEvent
@@ -20,7 +20,7 @@ log = logging.getLogger("pyobs")
 class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, settle_time: float = 3.0, park_position: Tuple[float, float] = (180.0, 15.0), **kwargs: Any):
+    def __init__(self, settle_time: float = 3.0, park_position: tuple[float, float] = (180.0, 15.0), **kwargs: Any):
         """Initializes a new ASCOM Alpaca telescope.
 
         Args:
@@ -300,18 +300,18 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         finally:
             self._lock_moving.release()
 
-    async def get_offsets_radec(self, **kwargs: Any) -> Tuple[float, float]:
+    async def get_offsets_radec(self, **kwargs: Any) -> tuple[float, float]:
         """Get RA/Dec offset.
         Returns:
-            Tuple with RA and Dec offsets.
+            tuple with RA and Dec offsets.
         """
         return self._offset_ra, self._offset_dec
 
-    async def get_radec(self, **kwargs: Any) -> Tuple[float, float]:
+    async def get_radec(self, **kwargs: Any) -> tuple[float, float]:
         """Returns current RA and Dec.
 
         Returns:
-            Tuple of current RA and Dec in degrees.
+            tuple of current RA and Dec in degrees.
         """
 
         try:
@@ -327,11 +327,11 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         except ConnectionError:
             raise ValueError("Could not fetch Alt/Az.")
 
-    async def get_altaz(self, **kwargs: Any) -> Tuple[float, float]:
+    async def get_altaz(self, **kwargs: Any) -> tuple[float, float]:
         """Returns current Alt and Az.
 
         Returns:
-            Tuple of current Alt and Az in degrees.
+            tuple of current Alt and Az in degrees.
         """
 
         try:
@@ -346,7 +346,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         except ConnectionError:
             raise ValueError("Could not fetch Alt/Az.")
 
-    async def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
+    async def stop_motion(self, device: str | None = None, **kwargs: Any) -> None:
         """Stop the motion.
 
         Args:
@@ -391,8 +391,8 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         await self._device.put("SyncToCoordinates", RightAscension=ra / 15.0, Declination=dec)
 
     async def get_fits_header_before(
-        self, namespaces: Optional[List[str]] = None, **kwargs: Any
-    ) -> Dict[str, Tuple[Any, str]]:
+        self, namespaces: list[str] | None = None, **kwargs: Any
+    ) -> dict[str, tuple[Any, str]]:
         """Returns FITS header for the current status of this module.
 
         Args:

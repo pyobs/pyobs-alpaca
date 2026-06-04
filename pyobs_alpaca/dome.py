@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Tuple, Optional, Any
+from typing import Any
 
 from pyobs.events import RoofOpenedEvent, RoofClosingEvent
 from pyobs.mixins import FollowMixin
@@ -20,7 +20,7 @@ log = logging.getLogger("pyobs")
 class AlpacaDome(FollowMixin, BaseDome):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, tolerance: float = 3, park_az: float = 180, follow: Optional[str] = None, **kwargs: Any):
+    def __init__(self, tolerance: float = 3, park_az: float = 180, follow: str | None = None, **kwargs: Any):
         """Initializes a new ASCOM Alpaca telescope.
 
         Args:
@@ -267,7 +267,7 @@ class AlpacaDome(FollowMixin, BaseDome):
             # change status to TRACKING or POSITIONED, depending on whether we're tracking
             await self._change_motion_status(MotionStatus.TRACKING if self.is_following else MotionStatus.POSITIONED)
 
-    async def get_altaz(self, **kwargs: Any) -> Tuple[float, float]:
+    async def get_altaz(self, **kwargs: Any) -> tuple[float, float]:
         """Returns current Alt and Az.
 
         Returns:
@@ -275,7 +275,7 @@ class AlpacaDome(FollowMixin, BaseDome):
         """
         return self._altitude, self._azimuth
 
-    async def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
+    async def stop_motion(self, device: str | None = None, **kwargs: Any) -> None:
         """Stop the motion.
 
         Args:
