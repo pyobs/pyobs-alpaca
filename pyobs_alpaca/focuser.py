@@ -1,14 +1,14 @@
 import asyncio
 import logging
-from typing import List, Dict, Tuple, Any, Optional
+from typing import Any
 
-from pyobs.modules import Module
-from pyobs.interfaces import IFocuser, IFitsHeaderBefore
+from pyobs.interfaces import FocuserState, IFitsHeaderBefore, IFocuser, IReady, ReadyState
 from pyobs.mixins import MotionStatusMixin
-from pyobs.modules import timeout
+from pyobs.modules import Module, timeout
+from pyobs.utils import exceptions as exc
 from pyobs.utils.enums import MotionStatus
 from pyobs.utils.threads import LockWithAbort
-from pyobs.utils import exceptions as exc
+
 from .device import AlpacaDevice
 
 log = logging.getLogger(__name__)
@@ -45,166 +45,83 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
 
         # init status
         await self._change_motion_status(MotionStatus.IDLE, interface="IFocuser")
+        await self.comm.set_state(IReady, ReadyState(ready=self._device.connected))
 
     async def init(self, **kwargs: Any) -> None:
-        """Initialize device.
-
-        Raises:
-            pyobs.utils.exceptions.InitError: If device could not be initialized.
-        """
+        """Initialize device."""
         pass
 
     async def park(self, **kwargs: Any) -> None:
-        """Park device.
-
-        Raises:
-            pyobs.utils.exceptions.ParkError: If device could not be parked.
-        """
+        """Park device."""
         pass
 
     async def get_fits_header_before(
-        self, namespaces: Optional[List[str]] = None, **kwargs: Any
-    ) -> Dict[str, Tuple[Any, str]]:
-        """Returns FITS header for the current status of this module.
+        self, namespaces: list[str] | None = None, **kwargs: Any
+    ) -> dict[str, tuple[Any, str]]:
+        """Returns FITS header for the current status of this module."""
 
-        Args:
-            namespaces: If given, only return FITS headers for the given namespaces.
-
-        Returns:
-            Dictionary containing FITS headers.
-        """
-
-        # get pos and step size
-        # StepSize is in microns, so multiply with 1000
         try:
             pos = await self._device.get("Position")
             step = await self._device.get("StepSize") * 1000.0
-
-            # return header
             return {"TEL-FOCU": (pos / step, "Focus of telescope [mm]")}
-
         except ConnectionError as e:
             log.warning("Could not determine focus position: %s", e)
             return {}
 
     @timeout(60000)
     async def set_focus(self, focus: float, **kwargs: Any) -> None:
-        """Sets new focus.
-
-        Raises:
-            pyobs.utils.exceptions.MoveError: If telescope cannot be moved.
-        """
-
-        # set focus + offset
-
+        """Sets new focus."""
         await self._set_focus(focus + self._focus_offset)
 
     async def set_focus_offset(self, offset: float, **kwargs: Any) -> None:
-        """Sets focus offset.
+        """Sets focus offset."""
 
-        Args:
-            offset: New focus offset.
+        # get current focus (without offset) directly from device
+        try:
+            pos = float(await self._device.get("Position"))
+            step = float(await self._device.get("StepSize")) * 1000.0
+            current_focus = pos / step - self._focus_offset
+        except ConnectionError:
+            raise exc.MoveError("Could not read focus position.")
 
-        Raises:
-            InterruptedError: If focus was interrupted.
-        """
-
-        # get current focus (without offset)
-        focus = await self.get_focus()
-
-        # set offset
         self._focus_offset = offset
-
-        # go to focus
-        await self._set_focus(focus + self._focus_offset)
+        await self._set_focus(current_focus + self._focus_offset)
 
     async def _set_focus(self, focus: float) -> None:
-        """Actually sets new focus.
+        """Actually sets new focus."""
 
-        Args:
-            focus: New focus value.
-        """
-
-        # acquire lock
         async with LockWithAbort(self._lock_motion, self._abort_motion):
             try:
-                # get step size
                 step = await self._device.get("StepSize")
 
-                # calculating new focus and move it
                 log.info("Moving focus to %.2fmm...", focus)
                 await self._change_motion_status(MotionStatus.SLEWING, interface="IFocuser")
                 foc = int(focus * step * 1000.0)
                 await self._device.put("Move", Position=foc)
 
-                # wait for it
                 while abs(await self._device.get("Position") - foc) > 10:
-                    # abort?
                     if self._abort_motion.is_set():
                         await self._device.put("Halt")
                         await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
                         raise InterruptedError("Setting focus aborted.")
-
-                    # sleep a little
                     await asyncio.sleep(0.1)
 
-                # finished
-                log.info("Reached new focus of %.2fmm.", await self._device.get("Position") / step / 1000.0)
+                pos = await self._device.get("Position")
+                log.info("Reached new focus of %.2fmm.", pos / step / 1000.0)
                 await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
+
+                # publish new state
+                await self.comm.set_state(
+                    IFocuser, FocuserState(focus=pos / step / 1000.0, focus_offset=self._focus_offset)
+                )
 
             except ConnectionError:
                 await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
                 raise exc.MoveError("Could not move focus.")
 
-    async def get_focus(self, **kwargs: Any) -> float:
-        """Return current focus.
-
-        Returns:
-            Current focus.
-        """
-
-        # get pos and step size
-        # StepSize is in microns, so multiply with 1000
-        pos = float(await self._device.get("Position"))
-        step = float(await self._device.get("StepSize")) * 1000.0
-
-        # return current focus - offset
-        return pos / step - self._focus_offset
-
-    async def get_focus_offset(self, **kwargs: Any) -> float:
-        """Return current focus offset.
-
-        Returns:
-            Current focus offset.
-        """
-        return self._focus_offset
-
-    async def stop_motion(self, device: Optional[str] = None, **kwargs: Any) -> None:
-        """Stop the motion.
-
-        Args:
-            device: Name of device to stop, or None for all.
-        """
-
-        # stop motion
+    async def stop_motion(self, device: str | None = None, **kwargs: Any) -> None:
+        """Stop the motion."""
         await self._device.put("Halt")
-
-    async def is_ready(self, **kwargs: Any) -> bool:
-        """Returns the device is "ready", whatever that means for the specific device.
-
-        Returns:
-            True, if telescope is initialized and not in an error state.
-        """
-
-        # check that motion is not in one of the states listed below
-        states = [
-            MotionStatus.PARKED,
-            MotionStatus.INITIALIZING,
-            MotionStatus.PARKING,
-            MotionStatus.ERROR,
-            MotionStatus.UNKNOWN,
-        ]
-        return self._device.connected and await self.get_motion_status() not in states
 
 
 __all__ = ["AlpacaFocuser"]
