@@ -1,17 +1,29 @@
 import asyncio
 import logging
 from typing import Any
-import numpy as np
 
+import numpy as np
 from pyobs.events import OffsetsRaDecEvent
+from pyobs.interfaces import (
+    AltAzState,
+    IFitsHeaderBefore,
+    IOffsetsRaDec,
+    IPointingAltAz,
+    IPointingRaDec,
+    IReady,
+    ISyncTarget,
+    RaDecOffsetState,
+    RaDecState,
+    ReadyState,
+)
 from pyobs.mixins import FitsNamespaceMixin
-from pyobs.interfaces import IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget
 from pyobs.modules import timeout
 from pyobs.modules.telescope.basetelescope import BaseTelescope
-from pyobs.utils.enums import MotionStatus
-from pyobs.utils.parallel import event_wait, acquire_lock
-from pyobs.utils.threads import LockWithAbort
 from pyobs.utils import exceptions as exc
+from pyobs.utils.enums import MotionStatus
+from pyobs.utils.parallel import acquire_lock, event_wait
+from pyobs.utils.threads import LockWithAbort
+
 from .device import AlpacaDevice
 
 log = logging.getLogger("pyobs")
@@ -25,7 +37,7 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
         Args:
             settle_time: Time in seconds to wait after slew before finishing.
-            park_position: Alt/Az park position
+            park_position: Alt/Az park position.
         """
         BaseTelescope.__init__(self, **kwargs, motion_status_interfaces=["ITelescope"])
 
@@ -40,18 +52,26 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         self._offset_ra = 0.0
         self._offset_dec = 0.0
 
+        # cached position for sync property
+        self._cached_ra: float | None = None
+        self._cached_dec: float | None = None
+
         # mixins
         FitsNamespaceMixin.__init__(self, **kwargs)
 
-    async def open(self) -> None:
-        """Open module.
+        # background position polling
+        self.add_background_task(self._update_position)
 
-        Raises:
-            ValueError: If cannot connect to device.
-        """
+    @property
+    def _position_radec(self) -> tuple[float, float] | None:
+        if self._cached_ra is None or self._cached_dec is None:
+            return None
+        return self._cached_ra, self._cached_dec
+
+    async def open(self) -> None:
+        """Open module."""
         await BaseTelescope.open(self)
 
-        # initial status
         status = await self._get_status()
         if status == MotionStatus.UNKNOWN:
             log.error("Could not fetch initial status from telescope.")
@@ -59,7 +79,6 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
     async def _get_status(self) -> MotionStatus:
         """Get status of telescope."""
-
         try:
             if await self._device.get("AtPark"):
                 return MotionStatus.PARKED
@@ -69,127 +88,110 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
                 return MotionStatus.TRACKING
             else:
                 return MotionStatus.IDLE
-
         except ConnectionError:
             return MotionStatus.UNKNOWN
 
-    async def _check_status_thread(self) -> None:
-        """Periodically check status of telescope."""
-
+    async def _update_position(self) -> None:
+        """Periodically poll position from telescope and publish state."""
         while True:
-            # only check, if status is unknown
-            if await self.get_motion_status() == MotionStatus.UNKNOWN:
-                await self._change_motion_status(await self._get_status())
+            try:
+                ra_raw = await self._device.get("RightAscension")
+                dec = await self._device.get("Declination")
+                ra_off = self._offset_ra / np.cos(np.radians(dec))
+                ra = float(ra_raw * 15 - ra_off)
+                dec = float(dec - self._offset_dec)
 
-            # wait a little
-            await asyncio.sleep(5)
+                self._cached_ra = ra
+                self._cached_dec = dec
+                await self.comm.set_state(IPointingRaDec, RaDecState(ra=ra, dec=dec))
+
+                az_raw = await self._device.get("Azimuth") + 180
+                if az_raw > 360:
+                    az_raw -= 360
+                alt = await self._device.get("Altitude")
+                await self.comm.set_state(IPointingAltAz, AltAzState(alt=alt, az=az_raw))
+            except ConnectionError:
+                self._cached_ra = None
+                self._cached_dec = None
+
+            bad_states = [
+                MotionStatus.PARKED,
+                MotionStatus.INITIALIZING,
+                MotionStatus.PARKING,
+                MotionStatus.ERROR,
+                MotionStatus.UNKNOWN,
+            ]
+            ready = self._device.connected and self.motion_status() not in bad_states
+            await self.comm.set_state(IReady, ReadyState(ready=ready))
+
+            await asyncio.sleep(2)
 
     @timeout(60000)
     async def init(self, **kwargs: Any) -> None:
-        """Initialize telescope.
+        """Initialize telescope."""
 
-        Raises:
-            pyobs.utils.exceptions.InitError: If telescope could not be initialized.
-        """
-
-        # weather?
         if not self.is_weather_good():
             raise exc.InitError("Weather seems to be bad.")
 
-        # if already initializing, ignore
-        if await self.get_motion_status() in [MotionStatus.INITIALIZING, MotionStatus.ERROR]:
+        if self.motion_status() in [MotionStatus.INITIALIZING, MotionStatus.ERROR]:
             return
 
-        # acquire lock
         async with LockWithAbort(self._lock_moving, self._abort_move):
-            # not connected
             if not self._device.connected:
                 raise exc.InitError("Not connected to ASCOM.")
 
-            # change status
             log.info("Initializing telescope...")
             await self._change_motion_status(MotionStatus.INITIALIZING)
 
-            # move to init position
             try:
                 await self._move_altaz(30, 180.0, self._abort_move)
                 await self._change_motion_status(MotionStatus.IDLE)
                 log.info("Telescope initialized.")
-
             except ConnectionError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
                 raise exc.InitError("Could not init telescope.")
-
             except InterruptedError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
 
     @timeout(60000)
     async def park(self, **kwargs: Any) -> None:
-        """Park telescope.
+        """Park telescope."""
 
-        Raises:
-            pyobs.utils.exceptions.ParkError: If telescope could not be parked.
-        """
-
-        # if already parking, ignore
-        if await self.get_motion_status() == [MotionStatus.PARKING, MotionStatus.ERROR]:
+        if self.motion_status() in [MotionStatus.PARKING, MotionStatus.ERROR]:
             return
 
-        # acquire lock
         async with LockWithAbort(self._lock_moving, self._abort_move):
-            # not connected
             if not self._device.connected:
                 raise exc.ParkError("Not connected to ASCOM.")
 
-            # change status
             log.info("Parking telescope...")
             await self._change_motion_status(MotionStatus.PARKING)
 
-            # park telescope
             try:
-                # first move the telescope to its park position, which can be aborted
                 await self._move_altaz(self._park_position[1], self._park_position[0], self._abort_move)
-
-                # then actually park
                 await self._device.put("Park", timeout=60)
                 await self._change_motion_status(MotionStatus.PARKED)
                 log.info("Telescope parked.")
-
             except ConnectionError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
                 raise exc.ParkError("Could not park telescope.")
-
             except InterruptedError:
                 await self._change_motion_status(MotionStatus.UNKNOWN)
 
     async def _move_altaz(self, alt: float, az: float, abort_event: asyncio.Event) -> None:
-        """Actually moves to given coordinates. Must be implemented by derived classes.
+        """Move to Alt/Az coordinates."""
 
-        Args:
-            alt: Alt in deg to move to.
-            az: Az in deg to move to.
-            abort_event: Event that gets triggered when movement should be aborted.
-
-        Raises:
-            pyobs.utils.exceptions.MoveError: If telescope cannot be moved.
-        """
-
-        # reset offsets
         self._offset_ra, self._offset_dec = 0, 0
 
         try:
-            # start slewing
             await self._device.put("Tracking", Tracking=False)
             await self._device.put("SlewToAltAzAsync", Azimuth=az, Altitude=alt)
 
-            # wait for it
             while await self._device.get("Slewing"):
                 if await event_wait(abort_event, 1):
                     raise InterruptedError("Alt/Az movement aborted.")
 
             await self._device.put("Tracking", Tracking=False)
-
-            # wait settle time
             await event_wait(abort_event, self._settle_time)
 
         except ConnectionError:
@@ -198,32 +200,18 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             raise exc.MoveError("Could not move telescope to Alt/Az.")
 
     async def _move_radec(self, ra: float, dec: float, abort_event: asyncio.Event) -> None:
-        """Actually starts tracking on given coordinates. Must be implemented by derived classes.
+        """Start tracking on RA/Dec coordinates."""
 
-        Args:
-            ra: RA in deg to track.
-            dec: Dec in deg to track.
-            abort_event: Event that gets triggered when movement should be aborted.
-
-        Raises:
-            pyobs.utils.exceptions.MoveError: If telescope cannot be moved.
-        """
-
-        # reset offsets
         self._offset_ra, self._offset_dec = 0, 0
 
         try:
-            # start slewing
             await self._device.put("Tracking", Tracking=True)
             await self._device.put("SlewToCoordinatesAsync", RightAscension=ra / 15.0, Declination=dec)
 
-            # wait for it
             while await self._device.get("Slewing"):
                 if await event_wait(abort_event, 1):
                     raise InterruptedError("RA/Dec movement aborted.")
             await self._device.put("Tracking", Tracking=True)
-
-            # wait settle time
             await event_wait(abort_event, self._settle_time)
 
         except ConnectionError:
@@ -233,64 +221,52 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
     @timeout(10000)
     async def set_offsets_radec(self, dra: float, ddec: float, **kwargs: Any) -> None:
-        """Move an RA/Dec offset.
+        """Move an RA/Dec offset."""
 
-        Args:
-            dra: RA offset in degrees.
-            ddec: Dec offset in degrees.
-
-        Raises:
-            pyobs.utils.exceptions.MoveError: If offset could not be set.
-        """
-
-        # need to be tracking to set offset
-        if await self.get_motion_status() != MotionStatus.TRACKING:
+        if self.motion_status() != MotionStatus.TRACKING:
             log.warning("Can only set offset when tracking.")
             return
 
-        # try to acquire lock
         if not await acquire_lock(self._lock_moving, 5):
             log.warning("Could not acquire lock for setting offset.")
             return
 
         try:
-            # not connected
             if not self._device.connected:
                 raise exc.MoveError("Not connected to ASCOM.")
 
-            # start slewing
             await self._change_motion_status(MotionStatus.SLEWING)
             log.info('Setting telescope offsets to dRA=%.2f", dDec=%.2f"...', dra * 3600.0, ddec * 3600.0)
             await self.comm.send_event(OffsetsRaDecEvent(ra=dra, dec=ddec))
 
-            # get current coordinates (with old offsets)
-            ra, dec = await self.get_radec()
+            # get current coordinates from device (without old offsets)
+            ra_raw = await self._device.get("RightAscension")
+            dec_raw = await self._device.get("Declination")
+            old_ra_off = self._offset_ra / np.cos(np.radians(dec_raw))
+            ra = float(ra_raw * 15 - old_ra_off)
+            dec = float(dec_raw - self._offset_dec)
 
-            # store offsets
+            # store new offsets
             self._offset_ra = dra
             self._offset_dec = ddec
 
-            # add offset
+            # apply new offsets
             ra += float(self._offset_ra / np.cos(np.radians(dec)))
             dec += float(self._offset_dec)
 
-            # start slewing
             await self._device.put("Tracking", Tracking=True)
             await self._device.put("SlewToCoordinatesAsync", RightAscension=ra / 15.0, Declination=dec)
 
-            # wait for it
             while await self._device.get("Slewing"):
                 if await event_wait(self._abort_move, 1):
                     log.info("RA/Dec offset movement aborted.")
                     return
 
             await self._device.put("Tracking", Tracking=True)
-
-            # wait settle time
             await event_wait(self._abort_move, self._settle_time)
 
-            # finish slewing
             await self._change_motion_status(MotionStatus.TRACKING)
+            await self.comm.set_state(IOffsetsRaDec, RaDecOffsetState(ra=dra, dec=ddec))
             log.info("Reached destination.")
 
         except ConnectionError:
@@ -300,122 +276,34 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         finally:
             self._lock_moving.release()
 
-    async def get_offsets_radec(self, **kwargs: Any) -> tuple[float, float]:
-        """Get RA/Dec offset.
-        Returns:
-            tuple with RA and Dec offsets.
-        """
-        return self._offset_ra, self._offset_dec
-
-    async def get_radec(self, **kwargs: Any) -> tuple[float, float]:
-        """Returns current RA and Dec.
-
-        Returns:
-            tuple of current RA and Dec in degrees.
-        """
-
-        try:
-            # get position
-            ra, dec = await self._device.get("RightAscension"), await self._device.get("Declination")
-
-            # correct ra offset by decl
-            ra_off = self._offset_ra / np.cos(np.radians(dec))
-
-            # return coordinates without offsets
-            return float(ra * 15 - ra_off), float(dec - self._offset_dec)
-
-        except ConnectionError:
-            raise ValueError("Could not fetch Alt/Az.")
-
-    async def get_altaz(self, **kwargs: Any) -> tuple[float, float]:
-        """Returns current Alt and Az.
-
-        Returns:
-            tuple of current Alt and Az in degrees.
-        """
-
-        try:
-            # correct az
-            az = await self._device.get("Azimuth") + 180
-            if az > 360:
-                az -= 360
-
-            # create sky coordinates
-            return await self._device.get("Altitude"), az
-
-        except ConnectionError:
-            raise ValueError("Could not fetch Alt/Az.")
-
     async def stop_motion(self, device: str | None = None, **kwargs: Any) -> None:
-        """Stop the motion.
-
-        Args:
-            device: Name of device to stop, or None for all.
-        """
-
+        """Stop the motion."""
         try:
-            # stop telescope
             self._abort_move.set()
             await self._device.put("AbortSlew")
             await self._device.put("Tracking", Tracking=False)
             await self._change_motion_status(MotionStatus.IDLE)
-
         except ConnectionError:
             await self._change_motion_status(MotionStatus.UNKNOWN)
             raise exc.MoveError("Could not stop telescope.")
 
-    async def is_ready(self, **kwargs: Any) -> bool:
-        """Returns the device is "ready", whatever that means for the specific device.
-
-        Returns:
-            Whether device is ready
-        """
-
-        # check that motion is not in one of the states listed below
-        states = [
-            MotionStatus.PARKED,
-            MotionStatus.INITIALIZING,
-            MotionStatus.PARKING,
-            MotionStatus.ERROR,
-            MotionStatus.UNKNOWN,
-        ]
-        return self._device.connected and await self.get_motion_status() not in states
-
     async def sync_target(self, **kwargs: Any) -> None:
         """Synchronize telescope on current target using current offsets."""
-
-        # get current RA/Dec without offsets
-        ra, dec = await self.get_radec()
-
-        # sync
-        await self._device.put("SyncToCoordinates", RightAscension=ra / 15.0, Declination=dec)
+        if self._cached_ra is None or self._cached_dec is None:
+            raise exc.MoveError("No position available for sync.")
+        await self._device.put("SyncToCoordinates", RightAscension=self._cached_ra / 15.0, Declination=self._cached_dec)
 
     async def get_fits_header_before(
         self, namespaces: list[str] | None = None, **kwargs: Any
     ) -> dict[str, tuple[Any, str]]:
-        """Returns FITS header for the current status of this module.
+        """Returns FITS header for the current status of this module."""
 
-        Args:
-            namespaces: If given, only return FITS headers for the given namespaces.
-
-        Returns:
-            Dictionary containing FITS headers.
-        """
-
-        # get headers from base
         hdr = await BaseTelescope.get_fits_header_before(self)
 
         try:
-            # get offsets
-            ra_off, dec_off = await self.get_offsets_radec()
-
-            # define values to request
-            hdr["RAOFF"] = (ra_off, "RA offset [deg]")
-            hdr["DECOFF"] = (dec_off, "Dec offset [deg]")
-
-            # return it
+            hdr["RAOFF"] = (self._offset_ra, "RA offset [deg]")
+            hdr["DECOFF"] = (self._offset_dec, "Dec offset [deg]")
             return self._filter_fits_namespace(hdr, namespaces=namespaces, **kwargs)
-
         except ConnectionError:
             return {}
 

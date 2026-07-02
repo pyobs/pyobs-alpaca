@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from typing import Any, NamedTuple
-import aiohttp
 
+import aiohttp
 from pyobs.object import Object
 
 log = logging.getLogger("pyobs")
@@ -112,14 +112,7 @@ class AlpacaDevice(Object):
         Returns:
             Full Alpaca URL
         """
-        return "http://%s:%d/api/%s/%s/%d/%s" % (
-            self._server,
-            self._port,
-            self._version,
-            self._type,
-            self._device,
-            name.lower(),
-        )
+        return f"http://{self._server}:{self._port}/api/{self._version}/{self._type}/{self._device}/{name.lower()}"
 
     async def _get(self, name: str) -> Any:
         """Calls GET on Alpaca server, which returns value for variable with given name.
@@ -140,7 +133,7 @@ class AlpacaDevice(Object):
         # request it
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=5) as response:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
                     if response.status != 200:
                         raise ConnectionError(
                             f"ALPACA server responded with error {response.status}: {await response.text()}."
@@ -148,13 +141,13 @@ class AlpacaDevice(Object):
                     json = await response.json()
                     resp = ServerGetResponse(**json)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # raise a ConnectionError instead
             raise ConnectionError("Connection to ALPACA server timed out.")
 
         # check error
         if resp.ErrorNumber != 0:
-            raise ConnectionError("Server error: %s" % resp.ErrorMessage)
+            raise ConnectionError(f"Server error: {resp.ErrorMessage}")
 
         # return value
         return resp.Value
@@ -177,7 +170,7 @@ class AlpacaDevice(Object):
             raise ConnectionError("Not connected to ASCOM.")
         return await self._get(name)
 
-    async def put(self, name: str, timeout: float = 5, **values: Any) -> None:
+    async def put(self, name: str, timeout: float = 5.0, **values: Any) -> None:
         """Calls PUT on Alpaca server with given variable, which might set a variable or call a method.
 
         Args:
@@ -199,7 +192,7 @@ class AlpacaDevice(Object):
         # request it
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.put(url, data=values, timeout=timeout) as response:
+                async with session.put(url, data=values, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
                     if response.status != 200:
                         raise ConnectionError(
                             f"ALPACA server responded with error {response.status}: {await response.text()}."
@@ -207,13 +200,13 @@ class AlpacaDevice(Object):
                     json = await response.json()
                     resp = ServerPutResponse(**json)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # raise a ConnectionError instead
             raise ConnectionError("Connection to ALPACA server timed out.")
 
         # check error
         if resp.ErrorNumber != 0:
-            raise ConnectionError("Server error: %s" % resp.ErrorMessage)
+            raise ConnectionError(f"Server error: {resp.ErrorMessage}")
 
 
 __all__ = ["AlpacaDevice"]
