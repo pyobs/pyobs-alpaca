@@ -6,6 +6,7 @@ import numpy as np
 from pyobs.events import OffsetsRaDecEvent
 from pyobs.interfaces import (
     AltAzState,
+    FitsHeaderEntry,
     IFitsHeaderBefore,
     IOffsetsRaDec,
     IPointingAltAz,
@@ -295,14 +296,14 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
 
     async def get_fits_header_before(
         self, namespaces: list[str] | None = None, **kwargs: Any
-    ) -> dict[str, tuple[Any, str]]:
+    ) -> dict[str, FitsHeaderEntry]:
         """Returns FITS header for the current status of this module."""
 
         hdr = await BaseTelescope.get_fits_header_before(self)
 
         try:
-            hdr["RAOFF"] = (self._offset_ra, "RA offset [deg]")
-            hdr["DECOFF"] = (self._offset_dec, "Dec offset [deg]")
+            hdr["RAOFF"] = FitsHeaderEntry(self._offset_ra, "RA offset [deg]")
+            hdr["DECOFF"] = FitsHeaderEntry(self._offset_dec, "Dec offset [deg]")
             return self._filter_fits_namespace(hdr, namespaces=namespaces, **kwargs)
         except ConnectionError:
             return {}

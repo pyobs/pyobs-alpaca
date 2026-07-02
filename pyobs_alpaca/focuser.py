@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Any
 
-from pyobs.interfaces import FocuserState, IFitsHeaderBefore, IFocuser, IReady, ReadyState
+from pyobs.interfaces import FitsHeaderEntry, FocuserState, IFitsHeaderBefore, IFocuser, IReady, ReadyState
 from pyobs.mixins import MotionStatusMixin
 from pyobs.modules import Module, timeout
 from pyobs.utils import exceptions as exc
@@ -57,13 +57,13 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
 
     async def get_fits_header_before(
         self, namespaces: list[str] | None = None, **kwargs: Any
-    ) -> dict[str, tuple[Any, str]]:
+    ) -> dict[str, FitsHeaderEntry]:
         """Returns FITS header for the current status of this module."""
 
         try:
             pos = await self._device.get("Position")
             step = await self._device.get("StepSize") * 1000.0
-            return {"TEL-FOCU": (pos / step, "Focus of telescope [mm]")}
+            return {"TEL-FOCU": FitsHeaderEntry(pos / step, "Focus of telescope [mm]")}
         except ConnectionError as e:
             log.warning("Could not determine focus position: %s", e)
             return {}
