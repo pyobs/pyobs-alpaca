@@ -33,6 +33,10 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         # init mixins
         MotionStatusMixin.__init__(self, motion_status_interfaces=["IFocuser"])
 
+        # TODO: exc.register_exception was retired in pyobs-core (exception-handling rollout step 3,
+        # tracks pyobs-core#446) -- register_exception is now an instance method,
+        # self._register_exception(...), called the same way but without exc. in front. Update once
+        # pyobs-core is bumped past that change.
         # register exception
         exc.register_exception(exc.MotionError, 3, timespan=600, callback=self._default_remote_error_callback)
 
