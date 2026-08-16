@@ -220,6 +220,10 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             await self.stop_motion()
             raise exc.MoveError("Could not move telescope to RA/Dec.")
 
+    async def _set_tracking_rate(self, ra_rate: float, dec_rate: float) -> None:
+        """Tracking rates are not supported by the Alpaca telescope driver."""
+        raise NotImplementedError
+
     @timeout(10000)
     async def set_offsets_radec(self, dra: float, ddec: float, **kwargs: Any) -> None:
         """Move an RA/Dec offset."""
