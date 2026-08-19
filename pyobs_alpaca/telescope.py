@@ -25,7 +25,7 @@ from pyobs.utils.enums import MotionStatus
 from pyobs.utils.parallel import acquire_lock, event_wait
 from pyobs.utils.threads import LockWithAbort
 
-from .device import AlpacaDevice
+from .device import DEVICE_INIT_KWARGS, OBJECT_SHARED_KWARGS, AlpacaDevice
 
 log = logging.getLogger("pyobs")
 
@@ -40,10 +40,15 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
             settle_time: Time in seconds to wait after slew before finishing.
             park_position: Alt/Az park position.
         """
-        BaseTelescope.__init__(self, **kwargs, motion_status_interfaces=["ITelescope"])
+        super().__init__(
+            motion_status_interfaces=["ITelescope"],
+            **{k: v for k, v in kwargs.items() if k not in DEVICE_INIT_KWARGS},
+        )
 
         # device
-        self._device = self.add_child_object(AlpacaDevice, **kwargs)
+        self._device = self.add_child_object(
+            AlpacaDevice, **{k: v for k, v in kwargs.items() if k in DEVICE_INIT_KWARGS | OBJECT_SHARED_KWARGS}
+        )
 
         # variables
         self._settle_time = settle_time
@@ -56,9 +61,6 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
         # cached position for sync property
         self._cached_ra: float | None = None
         self._cached_dec: float | None = None
-
-        # mixins
-        FitsNamespaceMixin.__init__(self, **kwargs)
 
         # background position polling
         self.add_background_task(self._update_position)

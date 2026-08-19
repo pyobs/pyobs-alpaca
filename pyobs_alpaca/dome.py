@@ -13,12 +13,12 @@ from pyobs.utils.enums import MotionStatus
 from pyobs.utils.parallel import event_wait
 from pyobs.utils.threads import LockWithAbort
 
-from .device import AlpacaDevice
+from .device import DEVICE_INIT_KWARGS, OBJECT_SHARED_KWARGS, AlpacaDevice
 
 log = logging.getLogger("pyobs")
 
 
-class AlpacaDome(FollowMixin, BaseDome):
+class AlpacaDome(BaseDome, FollowMixin):
     __module__ = "pyobs_alpaca"
 
     def __init__(self, tolerance: float = 3, park_az: float = 180, follow: str | None = None, **kwargs: Any):
@@ -29,10 +29,20 @@ class AlpacaDome(FollowMixin, BaseDome):
             park_az: Azimuth for park position.
             follow: Name of other device (e.g. telescope) to follow.
         """
-        BaseDome.__init__(self, **kwargs, motion_status_interfaces=["IDome"])
+        super().__init__(
+            motion_status_interfaces=["IDome"],
+            device=follow,
+            interval=10,
+            tolerance=tolerance,
+            mode=IPointingAltAz,
+            only_follow_when_ready=False,
+            **{k: v for k, v in kwargs.items() if k not in DEVICE_INIT_KWARGS},
+        )
 
         # device
-        self._device = self.add_child_object(AlpacaDevice, **kwargs)
+        self._device = self.add_child_object(
+            AlpacaDevice, **{k: v for k, v in kwargs.items() if k in DEVICE_INIT_KWARGS | OBJECT_SHARED_KWARGS}
+        )
 
         # store
         self._tolerance = tolerance
@@ -52,11 +62,6 @@ class AlpacaDome(FollowMixin, BaseDome):
 
         # start thread
         self.add_background_task(self._update_status)
-
-        # mixins
-        FollowMixin.__init__(
-            self, device=follow, interval=10, tolerance=tolerance, mode=IPointingAltAz, only_follow_when_ready=False
-        )
 
     async def open(self) -> None:
         """Open module."""
