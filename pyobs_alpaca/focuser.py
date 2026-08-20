@@ -9,19 +9,24 @@ from pyobs.utils import exceptions as exc
 from pyobs.utils.enums import MotionStatus
 from pyobs.utils.threads import LockWithAbort
 
-from .device import AlpacaDevice
+from .device import DEVICE_INIT_KWARGS, OBJECT_SHARED_KWARGS, AlpacaDevice
 
 log = logging.getLogger(__name__)
 
 
-class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
+class AlpacaFocuser(Module, MotionStatusMixin, IFocuser, IFitsHeaderBefore):
     __module__ = "pyobs_alpaca"
 
     def __init__(self, **kwargs: Any):
-        Module.__init__(self, **kwargs)
+        super().__init__(
+            motion_status_interfaces=["IFocuser"],
+            **{k: v for k, v in kwargs.items() if k not in DEVICE_INIT_KWARGS},
+        )
 
         # device
-        self._device = self.add_child_object(AlpacaDevice, **kwargs)
+        self._device = self.add_child_object(
+            AlpacaDevice, **{k: v for k, v in kwargs.items() if k in DEVICE_INIT_KWARGS | OBJECT_SHARED_KWARGS}
+        )
 
         # variables
         self._focus_offset = 0.0
@@ -29,9 +34,6 @@ class AlpacaFocuser(MotionStatusMixin, IFocuser, IFitsHeaderBefore, Module):
         # allow to abort motion
         self._lock_motion = asyncio.Lock()
         self._abort_motion = asyncio.Event()
-
-        # init mixins
-        MotionStatusMixin.__init__(self, motion_status_interfaces=["IFocuser"])
 
         # register exception
         self._register_exception(exc.MotionError, 3, timespan=600, callback=self._default_remote_error_callback)

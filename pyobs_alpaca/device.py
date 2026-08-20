@@ -23,6 +23,19 @@ class ServerGetResponse(NamedTuple):
     Value: Any
 
 
+DEVICE_INIT_KWARGS = {"server", "port", "device_type", "device", "version", "alive_parameter"}
+"""Names of AlpacaDevice's own constructor params -- callers that also thread **kwargs through
+their own cooperative super().__init__() chain must exclude these first, since nothing in that
+chain (Module/mixins) recognizes them and they'd otherwise leak through to object.__init__()."""
+
+OBJECT_SHARED_KWARGS = {"vfs", "comm", "timezone", "location", "observer"}
+"""Names of pyobs.object.Object's own constructor params. AlpacaDevice forwards anything beyond
+its own params (see DEVICE_INIT_KWARGS) straight to Object cooperatively, so callers building an
+AlpacaDevice from a module's **kwargs must restrict to DEVICE_INIT_KWARGS | OBJECT_SHARED_KWARGS --
+any module/mixin-specific kwarg (e.g. fits_namespaces, motion_status_interfaces) would otherwise
+leak through to object.__init__() the same way."""
+
+
 class AlpacaDevice(Object):
     def __init__(
         self,
