@@ -1902,7 +1902,7 @@ wheels = [
 
 [[package]]
 name = "pyobs-alpaca"
-version = "2.0.0.dev6"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -1923,7 +1923,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.2.5,<3" },
-    { name = "pyobs-core", specifier = ">=2.0.0.dev82,<3" },
+    { name = "pyobs-core", specifier = ">=2.0.0,<3" },
 ]
 
 [package.metadata.requires-dev]
@@ -1938,7 +1938,7 @@ dev = [
 
 [[package]]
 name = "pyobs-core"
-version = "2.0.0.dev91"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1970,9 +1970,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/62/d1fd0cf3151bfea63d84f6b54347be5791e91b5deee519cd34e64f9f1738/pyobs_core-2.0.0.dev91.tar.gz", hash = "sha256:4fe3e77fee9ddedbeba58414bd4931afbf5172abd42a589440865ea401f1aa47", size = 367177, upload-time = "2026-08-21T07:40:29.948Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/35/57654254c92f7264454a527abc317742995189ee7d7a2d9c6c5b32c90fc5/pyobs_core-2.0.0.tar.gz", hash = "sha256:87b77406f907a9fecb4630a45c002e354134e3c8b11a51e436289489bbb18fe6", size = 374158, upload-time = "2026-08-26T11:44:08.181Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/24/e4b2e9b5550561832db50bbcb18ecaf6b18df245bce6ba9926cb9e925760/pyobs_core-2.0.0.dev91-py3-none-any.whl", hash = "sha256:bc5a08c3eca102c460938b590a3183453e101950f4ca1250e0bc974c5e6caa86", size = 590331, upload-time = "2026-08-21T07:40:28.132Z" },
+    { url = "https://files.pythonhosted.org/packages/35/11/e8af2e0f099a16808ef1f42d398af73bc6c3935501f08a83f6628503e679/pyobs_core-2.0.0-py3-none-any.whl", hash = "sha256:3e97cc12d653978c3d963d41b984702a3169914776ef970d0fa21619d5cb3df6", size = 596861, upload-time = "2026-08-26T11:44:06.642Z" },
 ]
 
 [[package]]
