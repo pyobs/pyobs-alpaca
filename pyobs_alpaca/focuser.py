@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from pyobs.interfaces import FitsHeaderEntry, FocuserState, IFitsHeaderBefore, IFocuser, IReady, ReadyState
-from pyobs.mixins import MotionStatusMixin
+from pyobs.mixins import FocuserHeaderMixin, MotionStatusMixin
 from pyobs.modules import Module, timeout
 from pyobs.utils import exceptions as exc
 from pyobs.utils.enums import MotionStatus
@@ -14,7 +14,7 @@ from .device import DEVICE_INIT_KWARGS, OBJECT_SHARED_KWARGS, AlpacaDevice
 log = logging.getLogger(__name__)
 
 
-class AlpacaFocuser(Module, MotionStatusMixin, IFocuser, IFitsHeaderBefore):
+class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFitsHeaderBefore):
     __module__ = "pyobs_alpaca"
 
     def __init__(self, **kwargs: Any):
@@ -62,13 +62,16 @@ class AlpacaFocuser(Module, MotionStatusMixin, IFocuser, IFitsHeaderBefore):
     ) -> dict[str, FitsHeaderEntry]:
         """Returns FITS header for the current status of this module."""
 
+        hdr = await super().get_fits_header_before(namespaces, **kwargs)
+
         try:
             pos = await self._device.get("Position")
             step = await self._device.get("StepSize") * 1000.0
-            return {"TEL-FOCU": FitsHeaderEntry(pos / step, "Focus of telescope [mm]")}
+            hdr["TEL-FOCU"] = FitsHeaderEntry(pos / step, "Focus of telescope [mm]")
         except ConnectionError as e:
             log.warning("Could not determine focus position: %s", e)
-            return {}
+
+        return hdr
 
     @timeout(60000)
     async def set_focus(self, focus: float, **kwargs: Any) -> None:
