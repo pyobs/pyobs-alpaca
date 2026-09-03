@@ -1923,7 +1923,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.2.5,<3" },
-    { name = "pyobs-core", specifier = ">=2.6.0,<3" },
+    { name = "pyobs-core", specifier = ">=2.6.1,<3" },
 ]
 
 [package.metadata.requires-dev]
@@ -1938,7 +1938,7 @@ dev = [
 
 [[package]]
 name = "pyobs-core"
-version = "2.6.0"
+version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1970,9 +1970,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/09/17/8691e3d7d52abeea5fc1a64f78d9174d321f3b42eb6795991bde7050c7f3/pyobs_core-2.6.0.tar.gz", hash = "sha256:9e8f0028374eb5a1da15d1b13f1a417fdb0e19ba6e6fb1abb35cb126bf402eb0", size = 407527, upload-time = "2026-09-03T16:55:03.68Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/c6/cfaf041ee13cdec9475e8081043091de72f1f9e22e2c0788c2f048f93687/pyobs_core-2.6.1.tar.gz", hash = "sha256:c0c0314088f6d87304be65f296a855b5410efbd00881b3e56cc7ad3dc0613aa4", size = 407925, upload-time = "2026-09-03T17:17:55.708Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/ba/ce9ee7826d68c6cbf38f492a983ec70f470fff33acc479fa5e2834be90a1/pyobs_core-2.6.0-py3-none-any.whl", hash = "sha256:582e6ad096c0a09d83b8f335c7032c25d46b7e389359eb71715355836ec126f2", size = 636747, upload-time = "2026-09-03T16:55:01.745Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/60/936d5620525ab3c0b169dfd50a61b78cad03d2e13f3bd72c96aacb29a183/pyobs_core-2.6.1-py3-none-any.whl", hash = "sha256:629ddfd6e080f7fd9b71f84286c08b0c5a66a711be23a1d8f6c31233fbfdf006", size = 637177, upload-time = "2026-09-03T17:17:54.184Z" },
 ]
 
 [[package]]

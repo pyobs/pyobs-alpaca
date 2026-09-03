@@ -4,7 +4,7 @@ import time
 from typing import Any
 
 from pyobs.events import RoofClosingEvent, RoofOpenedEvent
-from pyobs.interfaces import AltAzState, IPointingAltAz, IReady, ReadyState
+from pyobs.interfaces import AltAzState, FitsHeaderEntry, IPointingAltAz, IReady, ReadyState
 from pyobs.mixins import FollowMixin
 from pyobs.modules import timeout
 from pyobs.modules.roof import BaseDome
@@ -16,6 +16,9 @@ from pyobs.utils.threads import LockWithAbort
 from .device import DEVICE_INIT_KWARGS, OBJECT_SHARED_KWARGS, AlpacaDevice
 
 log = logging.getLogger("pyobs")
+
+# ASCOM Alpaca ShutterState values (ICameraV3/IDomeV2 spec).
+_SHUTTER_STATUS = {0: "OPEN", 1: "CLOSED", 2: "OPENING", 3: "CLOSING", 4: "ERROR"}
 
 
 class AlpacaDome(BaseDome, FollowMixin):
@@ -55,7 +58,7 @@ class AlpacaDome(BaseDome, FollowMixin):
         self._abort_move = asyncio.Event()
 
         # status
-        self._shutter = None
+        self._shutter: int | None = None
         self._altitude = 0.0
         self._azimuth = 0.0
         self._set_az = 0.0
@@ -104,6 +107,7 @@ class AlpacaDome(BaseDome, FollowMixin):
                 await event_wait(self._abort_shutter, 1)
                 try:
                     status = await self._device.get("ShutterStatus")
+                    self._shutter = status
                 except ConnectionError:
                     await self._change_motion_status(MotionStatus.UNKNOWN)
                     raise exc.InitError("Could not open dome.")
@@ -150,6 +154,7 @@ class AlpacaDome(BaseDome, FollowMixin):
                 await event_wait(self._abort_shutter, 1)
                 try:
                     status = await self._device.get("ShutterStatus")
+                    self._shutter = status
                 except ConnectionError:
                     await self._change_motion_status(MotionStatus.UNKNOWN)
                     raise exc.ParkError("Could not close dome.")
@@ -248,6 +253,24 @@ class AlpacaDome(BaseDome, FollowMixin):
         if az >= 360:
             az -= 360
         return az
+
+    async def get_fits_header_before(
+        self, namespaces: list[str] | None = None, **kwargs: Any
+    ) -> dict[str, FitsHeaderEntry]:
+        """Returns FITS header for the current status of this module.
+
+        Args:
+            namespaces: If given, only return FITS headers for the given namespaces.
+
+        Returns:
+            Dictionary containing FITS headers.
+        """
+
+        hdr = await BaseDome.get_fits_header_before(self, namespaces, **kwargs)
+
+        shutter = _SHUTTER_STATUS.get(self._shutter, "UNKNOWN") if self._shutter is not None else "UNKNOWN"
+        hdr["DOMESHUT"] = FitsHeaderEntry(shutter, "Dome shutter status")
+        return hdr
 
 
 __all__ = ["AlpacaDome"]
