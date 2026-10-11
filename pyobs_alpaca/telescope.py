@@ -30,7 +30,9 @@ from .device import DEVICE_INIT_KWARGS, OBJECT_SHARED_KWARGS, AlpacaDevice
 log = logging.getLogger("pyobs")
 
 
-class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget):
+class AlpacaTelescope(
+    BaseTelescope, IPointingRaDec, IPointingAltAz, FitsNamespaceMixin, IFitsHeaderBefore, IOffsetsRaDec, ISyncTarget
+):
     __module__ = "pyobs_alpaca"
 
     def __init__(self, settle_time: float = 3.0, park_position: tuple[float, float] = (180.0, 15.0), **kwargs: Any):
