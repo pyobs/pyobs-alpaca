@@ -11,6 +11,8 @@ from pyobs.interfaces import (
     IFitsHeaderBefore,
     IFocuser,
     IOffsetsRaDec,
+    IPointingAltAz,
+    IPointingRaDec,
     ISyncTarget,
     ITelescope,
 )
@@ -34,6 +36,8 @@ def test_import_telescope_and_instantiate() -> None:
     assert isinstance(telescope, IFitsHeaderBefore)
     assert isinstance(telescope, IOffsetsRaDec)
     assert isinstance(telescope, ISyncTarget)
+    assert isinstance(telescope, IPointingRaDec)
+    assert isinstance(telescope, IPointingAltAz)
 
 
 def test_import_focuser_and_instantiate() -> None:
