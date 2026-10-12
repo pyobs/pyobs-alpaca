@@ -105,14 +105,17 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
                 target_steps = int((focus * 1000.0) / step)
                 await self._device.put("Move", Position=target_steps)
 
+                # Tolerance in raw focuser steps (ASCOM Position units)
+                step_tolerance = 10
+
                 loop = asyncio.get_running_loop()
                 deadline = loop.time() + self._move_timeout
-                while abs(await self._device.get("Position") - target_steps) > 10:
+                while await self._device.get("IsMoving"):
                     if loop.time() > deadline:
                         try:
                             await self._device.put("Halt")
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log.warning("Failed to halt focuser after timeout: %s", e)
                         await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
                         raise exc.MoveError(f"Focuser move timed out waiting for position {target_steps}.")
                     if self._abort_motion.is_set():
@@ -121,7 +124,27 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
                         raise InterruptedError("Setting focus aborted.")
                     await asyncio.sleep(0.1)
 
+                if self._abort_motion.is_set():
+                    await self._device.put("Halt")
+                    await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
+                    raise InterruptedError("Setting focus aborted.")
+
                 pos = await self._device.get("Position")
+                if loop.time() > deadline:
+                    try:
+                        await self._device.put("Halt")
+                    except Exception as e:
+                        log.warning("Failed to halt focuser after timeout: %s", e)
+                    await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                    raise exc.MoveError(f"Focuser move timed out waiting for position {target_steps}.")
+
+                if abs(pos - target_steps) > step_tolerance:
+                    await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                    raise exc.MoveError(
+                        f"Focuser stopped at position {pos}, outside tolerance of "
+                        f"{step_tolerance} steps from target {target_steps}."
+                    )
+
                 focus_mm = (pos * step) / 1000.0
                 log.info("Reached new focus of %.2fmm.", focus_mm)
                 await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
