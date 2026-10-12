@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFitsHeaderBefore):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, move_timeout: float = 60.0, **kwargs: Any):
         super().__init__(
             motion_status_interfaces=["IFocuser"],
             **{k: v for k, v in kwargs.items() if k not in DEVICE_INIT_KWARGS},
@@ -30,6 +30,7 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
 
         # variables
         self._focus_offset = 0.0
+        self._move_timeout = move_timeout
 
         # allow to abort motion
         self._lock_motion = asyncio.Lock()
@@ -104,7 +105,16 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
                 target_steps = int((focus * 1000.0) / step)
                 await self._device.put("Move", Position=target_steps)
 
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + self._move_timeout
                 while abs(await self._device.get("Position") - target_steps) > 10:
+                    if loop.time() > deadline:
+                        try:
+                            await self._device.put("Halt")
+                        except Exception:
+                            pass
+                        await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                        raise exc.MoveError(f"Focuser move timed out waiting for position {target_steps}.")
                     if self._abort_motion.is_set():
                         await self._device.put("Halt")
                         await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
