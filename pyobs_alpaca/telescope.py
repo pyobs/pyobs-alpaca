@@ -305,7 +305,8 @@ class AlpacaTelescope(BaseTelescope, FitsNamespaceMixin, IFitsHeaderBefore, IOff
     ) -> dict[str, FitsHeaderEntry]:
         """Returns FITS header for the current status of this module."""
 
-        hdr = await BaseTelescope.get_fits_header_before(self)
+        kwargs.setdefault("sender", "")
+        hdr = await BaseTelescope.get_fits_header_before(self, namespaces=namespaces, **kwargs)
 
         try:
             hdr["RAOFF"] = FitsHeaderEntry(self._offset_ra, "RA offset [deg]")
