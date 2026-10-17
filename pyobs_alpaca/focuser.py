@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFitsHeaderBefore):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, move_timeout: float = 60.0, **kwargs: Any):
         super().__init__(
             motion_status_interfaces=["IFocuser"],
             **{k: v for k, v in kwargs.items() if k not in DEVICE_INIT_KWARGS},
@@ -30,6 +30,7 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
 
         # variables
         self._focus_offset = 0.0
+        self._move_timeout = move_timeout
 
         # allow to abort motion
         self._lock_motion = asyncio.Lock()
@@ -66,8 +67,8 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
 
         try:
             pos = await self._device.get("Position")
-            step = await self._device.get("StepSize") * 1000.0
-            hdr["TEL-FOCU"] = FitsHeaderEntry(pos / step, "Focus of telescope [mm]")
+            step = await self._device.get("StepSize")
+            hdr["TEL-FOCU"] = FitsHeaderEntry((pos * step) / 1000.0, "Focus of telescope [mm]")
         except ConnectionError as e:
             log.warning("Could not determine focus position: %s", e)
 
@@ -84,8 +85,8 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
         # get current focus (without offset) directly from device
         try:
             pos = float(await self._device.get("Position"))
-            step = float(await self._device.get("StepSize")) * 1000.0
-            current_focus = pos / step - self._focus_offset
+            step = float(await self._device.get("StepSize"))
+            current_focus = (pos * step) / 1000.0 - self._focus_offset
         except ConnectionError:
             raise exc.MoveError("Could not read focus position.")
 
@@ -101,24 +102,55 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
 
                 log.info("Moving focus to %.2fmm...", focus)
                 await self._change_motion_status(MotionStatus.SLEWING, interface="IFocuser")
-                foc = int(focus * step * 1000.0)
-                await self._device.put("Move", Position=foc)
+                target_steps = int((focus * 1000.0) / step)
+                await self._device.put("Move", Position=target_steps)
 
-                while abs(await self._device.get("Position") - foc) > 10:
+                # Tolerance in raw focuser steps (ASCOM Position units)
+                step_tolerance = 10
+
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + self._move_timeout
+                while await self._device.get("IsMoving"):
+                    if loop.time() > deadline:
+                        try:
+                            await self._device.put("Halt")
+                        except Exception as e:
+                            log.warning("Failed to halt focuser after timeout: %s", e)
+                        await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                        raise exc.MoveError(f"Focuser move timed out waiting for position {target_steps}.")
                     if self._abort_motion.is_set():
                         await self._device.put("Halt")
                         await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
                         raise InterruptedError("Setting focus aborted.")
                     await asyncio.sleep(0.1)
 
+                if self._abort_motion.is_set():
+                    await self._device.put("Halt")
+                    await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
+                    raise InterruptedError("Setting focus aborted.")
+
                 pos = await self._device.get("Position")
-                log.info("Reached new focus of %.2fmm.", pos / step / 1000.0)
+                if loop.time() > deadline:
+                    try:
+                        await self._device.put("Halt")
+                    except Exception as e:
+                        log.warning("Failed to halt focuser after timeout: %s", e)
+                    await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                    raise exc.MoveError(f"Focuser move timed out waiting for position {target_steps}.")
+
+                if abs(pos - target_steps) > step_tolerance:
+                    await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                    raise exc.MoveError(
+                        f"Focuser stopped at position {pos}, outside tolerance of "
+                        f"{step_tolerance} steps from target {target_steps}."
+                    )
+
+                focus_mm = (pos * step) / 1000.0
+                log.info("Reached new focus of %.2fmm.", focus_mm)
                 await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
 
                 # publish new state
-                await self.comm.set_state(
-                    IFocuser, FocuserState(focus=pos / step / 1000.0, focus_offset=self._focus_offset)
-                )
+                await self.comm.set_state(IFocuser, FocuserState(focus=focus_mm, focus_offset=self._focus_offset))
 
             except ConnectionError:
                 await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
