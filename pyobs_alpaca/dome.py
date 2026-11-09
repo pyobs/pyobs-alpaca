@@ -24,12 +24,20 @@ _SHUTTER_STATUS = {0: "OPEN", 1: "CLOSED", 2: "OPENING", 3: "CLOSING", 4: "ERROR
 class AlpacaDome(BaseDome, FollowMixin):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, tolerance: float = 3, park_az: float = 180, follow: str | None = None, **kwargs: Any):
+    def __init__(
+        self,
+        tolerance: float = 3,
+        park_az: float = 180,
+        az_offset: float = 0.0,
+        follow: str | None = None,
+        **kwargs: Any,
+    ):
         """Initializes a new ASCOM Alpaca dome.
 
         Args:
             tolerance: Tolerance for azimuth.
             park_az: Azimuth for park position.
+            az_offset: Azimuth offset in degrees added when converting from device azimuth to North-zero azimuth.
             follow: Name of other device (e.g. telescope) to follow.
         """
         super().__init__(
@@ -50,6 +58,7 @@ class AlpacaDome(BaseDome, FollowMixin):
         # store
         self._tolerance = tolerance
         self._park_az = park_az
+        self._az_offset = az_offset
 
         # move locks
         self._lock_shutter = asyncio.Lock()
@@ -61,7 +70,7 @@ class AlpacaDome(BaseDome, FollowMixin):
         self._shutter: int | None = None
         self._altitude = 0.0
         self._azimuth = 0.0
-        self._set_az = 0.0
+        self._set_az: float | None = None
 
         # start thread
         self.add_background_task(self._update_status)
@@ -124,7 +133,7 @@ class AlpacaDome(BaseDome, FollowMixin):
         """Send command to close dome."""
         try:
             await self._device.put("CloseShutter")
-            await self._device.put("SlewToAzimuth", Azimuth=0)
+            await self._device.put("SlewToAzimuth", Azimuth=self._to_device_azimuth(self._park_az))
         except ConnectionError:
             await self._change_motion_status(MotionStatus.UNKNOWN)
             raise exc.ParkError("Could not close dome.")
@@ -168,15 +177,16 @@ class AlpacaDome(BaseDome, FollowMixin):
 
     async def _move(self, az: float, abort: asyncio.Event) -> None:
         """Move the dome to the given azimuth."""
+        target_az = float(az) % 360.0
 
         try:
-            await self._device.put("SlewToAzimuth", Azimuth=self._adjust_azimuth(az))
+            await self._device.put("SlewToAzimuth", Azimuth=self._to_device_azimuth(target_az))
         except ConnectionError:
             await self._change_motion_status(MotionStatus.UNKNOWN)
             raise exc.MoveError("Could not move dome.")
 
         log_timer = 0
-        while 180 - abs(abs(az - self._azimuth) - 180) > self._tolerance:
+        while self._angular_distance(target_az, self._azimuth) > self._tolerance:
             if abort.is_set():
                 raise InterruptedError("Moving dome aborted.")
 
@@ -184,14 +194,14 @@ class AlpacaDome(BaseDome, FollowMixin):
                 log.info(
                     "Moving dome from current az=%.2f° to %.2f° (%.2f° left)...",
                     self._azimuth,
-                    az,
-                    180 - abs(abs(az - self._azimuth) - 180),
+                    target_az,
+                    self._angular_distance(target_az, self._azimuth),
                 )
             log_timer = (log_timer + 1) % 10
 
             await event_wait(abort, 1)
 
-        log.info("Moved to az=%.2f.", az)
+        log.info("Moved to az=%.2f.", target_az)
 
     @timeout(1200000)
     async def move_altaz(self, alt: float, az: float, **kwargs: Any) -> None:
@@ -208,17 +218,18 @@ class AlpacaDome(BaseDome, FollowMixin):
         if not self._device.connected or self.motion_status() in bad_states:
             return
 
-        if az == self._set_az:
+        target_az = float(az) % 360.0
+        if target_az == self._set_az:
             return
-        self._set_az = az
+        self._set_az = target_az
 
-        large_move = abs(az - self._azimuth) > 2.0 * self._tolerance
+        large_move = self._angular_distance(target_az, self._azimuth) > 2.0 * self._tolerance
         tracking = self.is_following and not large_move
 
         async with LockWithAbort(self._lock_move, self._abort_move):
             self._altitude = alt
             await self._change_motion_status(MotionStatus.TRACKING if tracking else MotionStatus.SLEWING)
-            await self._move(az, self._abort_move)
+            await self._move(target_az, self._abort_move)
             await self._change_motion_status(MotionStatus.TRACKING if self.is_following else MotionStatus.POSITIONED)
 
     async def stop_motion(self, device: str | None = None, **kwargs: Any) -> None:
@@ -229,7 +240,7 @@ class AlpacaDome(BaseDome, FollowMixin):
         """Update status from dome."""
         while True:
             try:
-                self._azimuth = self._adjust_azimuth(await self._device.get("Azimuth"))
+                self._azimuth = self._from_device_azimuth(await self._device.get("Azimuth"))
                 await self.comm.set_state(IPointingAltAz, AltAzState(alt=self._altitude, az=self._azimuth))
             except ConnectionError:
                 pass
@@ -246,13 +257,18 @@ class AlpacaDome(BaseDome, FollowMixin):
 
             await asyncio.sleep(2)
 
+    def _from_device_azimuth(self, az: float) -> float:
+        """Convert device azimuth to North-zero azimuth in [0, 360)."""
+        return float(az + self._az_offset) % 360.0
+
+    def _to_device_azimuth(self, az: float) -> float:
+        """Convert North-zero azimuth to device azimuth in [0, 360)."""
+        return float(az - self._az_offset) % 360.0
+
     @staticmethod
-    def _adjust_azimuth(az: float) -> float:
-        """Baader measures azimuth as West of South — convert both ways."""
-        az += 180
-        if az >= 360:
-            az -= 360
-        return az
+    def _angular_distance(az1: float, az2: float) -> float:
+        """Shortest angular distance in degrees between two azimuths in [0, 180]."""
+        return abs((az1 - az2 + 180.0) % 360.0 - 180.0)
 
     async def get_fits_header_before(
         self, namespaces: list[str] | None = None, **kwargs: Any
