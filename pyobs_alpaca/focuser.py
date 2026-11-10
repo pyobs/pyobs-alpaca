@@ -66,8 +66,8 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
 
         try:
             pos = await self._device.get("Position")
-            step = await self._device.get("StepSize") * 1000.0
-            hdr["TEL-FOCU"] = FitsHeaderEntry(pos / step, "Focus of telescope [mm]")
+            step = await self._device.get("StepSize")
+            hdr["TEL-FOCU"] = FitsHeaderEntry((pos * step) / 1000.0, "Focus of telescope [mm]")
         except ConnectionError as e:
             log.warning("Could not determine focus position: %s", e)
 
@@ -84,8 +84,8 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
         # get current focus (without offset) directly from device
         try:
             pos = float(await self._device.get("Position"))
-            step = float(await self._device.get("StepSize")) * 1000.0
-            current_focus = pos / step - self._focus_offset
+            step = float(await self._device.get("StepSize"))
+            current_focus = (pos * step) / 1000.0 - self._focus_offset
         except ConnectionError:
             raise exc.MoveError("Could not read focus position.")
 
@@ -101,10 +101,10 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
 
                 log.info("Moving focus to %.2fmm...", focus)
                 await self._change_motion_status(MotionStatus.SLEWING, interface="IFocuser")
-                foc = int(focus * step * 1000.0)
-                await self._device.put("Move", Position=foc)
+                target_steps = int((focus * 1000.0) / step)
+                await self._device.put("Move", Position=target_steps)
 
-                while abs(await self._device.get("Position") - foc) > 10:
+                while abs(await self._device.get("Position") - target_steps) > 10:
                     if self._abort_motion.is_set():
                         await self._device.put("Halt")
                         await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
@@ -112,13 +112,12 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
                     await asyncio.sleep(0.1)
 
                 pos = await self._device.get("Position")
-                log.info("Reached new focus of %.2fmm.", pos / step / 1000.0)
+                focus_mm = (pos * step) / 1000.0
+                log.info("Reached new focus of %.2fmm.", focus_mm)
                 await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
 
                 # publish new state
-                await self.comm.set_state(
-                    IFocuser, FocuserState(focus=pos / step / 1000.0, focus_offset=self._focus_offset)
-                )
+                await self.comm.set_state(IFocuser, FocuserState(focus=focus_mm, focus_offset=self._focus_offset))
 
             except ConnectionError:
                 await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
