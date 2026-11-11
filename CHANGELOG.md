@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Entries for releases before this file existed were generated from commit subjects.
 
-## [Unreleased]
+## [2.1.0] - 2026-11-11
 
 - Add `az_offset` (default 180.0, South-zero as before) to AlpacaTelescope and AlpacaDome; set it to 0.0 for drivers that report ASCOM North-zero azimuth
 - Dome now slews to `park_az` (converted with `az_offset`) when closing, instead of device azimuth 0 (same position with the defaults)
