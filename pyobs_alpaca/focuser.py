@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFitsHeaderBefore):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, move_timeout: float = 60.0, **kwargs: Any):
         super().__init__(
             motion_status_interfaces=["IFocuser"],
             **{k: v for k, v in kwargs.items() if k not in DEVICE_INIT_KWARGS},
@@ -30,6 +30,7 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
 
         # variables
         self._focus_offset = 0.0
+        self._move_timeout = move_timeout
 
         # allow to abort motion
         self._lock_motion = asyncio.Lock()
@@ -104,14 +105,61 @@ class AlpacaFocuser(FocuserHeaderMixin, Module, MotionStatusMixin, IFocuser, IFi
                 target_steps = int((focus * 1000.0) / step)
                 await self._device.put("Move", Position=target_steps)
 
-                while abs(await self._device.get("Position") - target_steps) > 10:
+                # Tolerance in raw focuser steps (ASCOM Position units)
+                step_tolerance = 10
+                startup_grace = 0.5
+
+                loop = asyncio.get_running_loop()
+                now = loop.time()
+                deadline = now + self._move_timeout
+                startup_deadline = min(deadline, now + startup_grace)
+
+                # Wait briefly for IsMoving to turn true or Position to reach tolerance
+                pos: int | None = None
+                while True:
+                    is_moving = bool(await self._device.get("IsMoving"))
+                    if is_moving:
+                        pos = None
+                        break
                     if self._abort_motion.is_set():
-                        await self._device.put("Halt")
-                        await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
-                        raise InterruptedError("Setting focus aborted.")
+                        break
+                    pos = int(await self._device.get("Position"))
+                    if (
+                        abs(pos - target_steps) <= step_tolerance
+                        or self._abort_motion.is_set()
+                        or loop.time() >= startup_deadline
+                    ):
+                        break
                     await asyncio.sleep(0.1)
 
-                pos = await self._device.get("Position")
+                while is_moving:
+                    if loop.time() > deadline:
+                        try:
+                            await self._device.put("Halt")
+                        except Exception as e:
+                            log.warning("Failed to halt focuser after timeout: %s", e)
+                        await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                        raise exc.MoveError(f"Focuser move timed out waiting for position {target_steps}.")
+                    if self._abort_motion.is_set():
+                        break
+                    await asyncio.sleep(0.1)
+                    is_moving = bool(await self._device.get("IsMoving"))
+
+                if self._abort_motion.is_set():
+                    await self._device.put("Halt")
+                    await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")
+                    raise InterruptedError("Setting focus aborted.")
+
+                if pos is None:
+                    pos = int(await self._device.get("Position"))
+
+                if abs(pos - target_steps) > step_tolerance:
+                    await self._change_motion_status(MotionStatus.ERROR, interface="IFocuser")
+                    raise exc.MoveError(
+                        f"Focuser stopped at position {pos}, outside tolerance of "
+                        f"{step_tolerance} steps from target {target_steps}."
+                    )
+
                 focus_mm = (pos * step) / 1000.0
                 log.info("Reached new focus of %.2fmm.", focus_mm)
                 await self._change_motion_status(MotionStatus.POSITIONED, interface="IFocuser")

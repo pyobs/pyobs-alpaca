@@ -1,11 +1,197 @@
+import asyncio
+import logging
 from typing import Any
 
 import pytest
+from pyobs.utils import exceptions as exc
 from pyobs.utils.enums import MotionStatus
 
 from pyobs_alpaca.focuser import AlpacaFocuser
 
 _FOCUSER_ARGS = dict(server="localhost", port=11111, device_type="focuser", device=0)
+
+
+def test_focuser_default_move_timeout() -> None:
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS)
+    assert focuser._move_timeout == 60.0
+
+
+def test_focuser_custom_move_timeout() -> None:
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=30.0)
+    assert focuser._move_timeout == 30.0
+
+
+@pytest.mark.asyncio
+async def test_normal_movement_ismoving_transitions_to_false() -> None:
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=1.0)
+    target_steps = 500  # (10.0mm * 1000 um/mm) / 20.0 um/step
+
+    moving_states = [True, True, False]
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            if moving_states:
+                return moving_states.pop(0)
+            return False
+        if prop == "Position":
+            return target_steps
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        pass
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    await focuser._set_focus(10.0)
+
+    assert focuser.motion_status() == MotionStatus.POSITIONED
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_position_in_tolerance_while_moving_continues_waiting() -> None:
+    """Do not declare success while IsMoving=True even if Position is within tolerance."""
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=1.0)
+    target_steps = 500
+
+    poll_count = 0
+
+    async def mock_get(prop: str) -> Any:
+        nonlocal poll_count
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            poll_count += 1
+            return poll_count <= 2
+        if prop == "Position":
+            return target_steps
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        pass
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    await focuser._set_focus(10.0)
+
+    assert poll_count >= 3
+    assert focuser.motion_status() == MotionStatus.POSITIONED
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_stopped_outside_tolerance_raises_move_error() -> None:
+    """If device stops (IsMoving=False) outside tolerance, raise MoveError immediately."""
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=1.0)
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            return False
+        if prop == "Position":
+            return 400  # Target is 500, diff is 100 > 10 steps
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        pass
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    with pytest.raises(exc.MoveError, match="outside tolerance"):
+        await focuser._set_focus(10.0)
+
+    assert focuser.motion_status() == MotionStatus.ERROR
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_device_remains_moving_past_deadline_raises_timeout() -> None:
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=0.05)
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            return True  # Never stops moving
+        return 0
+
+    halt_called = False
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        nonlocal halt_called
+        if action == "Halt":
+            halt_called = True
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    with pytest.raises(exc.MoveError, match="timed out waiting for position"):
+        await focuser._set_focus(10.0)
+
+    assert halt_called is True
+    assert focuser.motion_status() == MotionStatus.ERROR
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_halt_failure_during_timeout_logged_and_raises_timeout_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=0.05)
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            return True
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        if action == "Halt":
+            raise RuntimeError("Halt network error")
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(exc.MoveError, match="timed out waiting for position"):
+            await focuser._set_focus(10.0)
+
+    assert "Failed to halt focuser after timeout" in caplog.text
+    assert focuser.motion_status() == MotionStatus.ERROR
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_already_at_requested_position_succeeds_immediately() -> None:
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=1.0)
+    target_steps = 500
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            return False  # Already stopped
+        if prop == "Position":
+            return target_steps
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        pass
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    await focuser._set_focus(10.0)
+
+    assert focuser.motion_status() == MotionStatus.POSITIONED
+    assert not focuser._lock_motion.locked()
 
 
 @pytest.mark.asyncio
@@ -93,39 +279,15 @@ async def test_unit_conversion_set_focus_offset() -> None:
 
 
 @pytest.mark.asyncio
-async def test_focuser_move_success() -> None:
-    focuser = AlpacaFocuser(**_FOCUSER_ARGS)
-    target_steps = 500  # (10.0 * 1000) / 20 = 500
-
-    async def mock_get(prop: str) -> Any:
-        if prop == "StepSize":
-            return 20.0
-        if prop == "Position":
-            return target_steps
-        return 0
-
-    async def mock_put(action: str, **kwargs: Any) -> None:
-        pass
-
-    focuser._device.get = mock_get  # type: ignore[assignment]
-    focuser._device.put = mock_put  # type: ignore[assignment]
-
-    await focuser._set_focus(10.0)
-
-    assert focuser.motion_status() == MotionStatus.POSITIONED
-    assert not focuser._lock_motion.locked()
-
-
-@pytest.mark.asyncio
 async def test_focuser_move_abort() -> None:
-    focuser = AlpacaFocuser(**_FOCUSER_ARGS)
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=1.0)
 
     async def mock_get(prop: str) -> Any:
         if prop == "StepSize":
             return 20.0
-        if prop == "Position":
+        if prop == "IsMoving":
             focuser._abort_motion.set()
-            return 0
+            return True
         return 0
 
     halt_called = False
@@ -142,5 +304,97 @@ async def test_focuser_move_abort() -> None:
         await focuser._set_focus(10.0)
 
     assert halt_called is True
+    assert focuser.motion_status() == MotionStatus.POSITIONED
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_delayed_ismoving_startup_waits_then_completes() -> None:
+    """Drivers that report IsMoving=False briefly after Move before flipping True must not raise false MoveError."""
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=2.0)
+    target_steps = 500
+
+    moving_states = [False, False, True, True, False]
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            return moving_states.pop(0) if moving_states else False
+        if prop == "Position":
+            return 100 if moving_states else target_steps
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        pass
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    await focuser._set_focus(10.0)
+
+    assert moving_states == []
+    assert focuser.motion_status() == MotionStatus.POSITIONED
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_fast_move_reaches_tolerance_without_ismoving_true() -> None:
+    """Micro-moves that settle within tolerance without ever observing IsMoving=True exit early and succeed."""
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=2.0)
+    target_steps = 500
+    positions = [480, target_steps]
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            return False
+        if prop == "Position":
+            return positions.pop(0) if positions else target_steps
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        pass
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    await focuser._set_focus(10.0)
+
+    assert positions == []
+    assert focuser.motion_status() == MotionStatus.POSITIONED
+    assert not focuser._lock_motion.locked()
+
+
+@pytest.mark.asyncio
+async def test_settled_after_deadline_succeeds_when_in_tolerance() -> None:
+    """Settled in-tolerance Position succeeds once IsMoving is False even if deadline elapsed during final poll/read."""
+    focuser = AlpacaFocuser(**_FOCUSER_ARGS, move_timeout=0.05)
+    target_steps = 500
+    moving_states = [True, False]
+    halt_called = False
+
+    async def mock_get(prop: str) -> Any:
+        if prop == "StepSize":
+            return 20.0
+        if prop == "IsMoving":
+            return moving_states.pop(0) if moving_states else False
+        if prop == "Position":
+            await asyncio.sleep(0.06)
+            return target_steps
+        return 0
+
+    async def mock_put(action: str, **kwargs: Any) -> None:
+        nonlocal halt_called
+        if action == "Halt":
+            halt_called = True
+
+    focuser._device.get = mock_get  # type: ignore[assignment]
+    focuser._device.put = mock_put  # type: ignore[assignment]
+
+    await focuser._set_focus(10.0)
+
+    assert halt_called is False
     assert focuser.motion_status() == MotionStatus.POSITIONED
     assert not focuser._lock_motion.locked()
