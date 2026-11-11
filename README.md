@@ -58,6 +58,14 @@ And finally, for a dome:
     follow: telescope
     weather: weather
 
+Telescope and dome convert azimuth with `az_offset` (default `180.0`, for South-zero drivers such as ASA Autoslew
+and Baader). For drivers that follow the ASCOM standard (North-zero), set `az_offset: 0.0` in both modules, and
+`park_az` for the dome is then given in North-zero azimuth as well:
+
+    class: pyobs_alpaca.AlpacaDome
+    az_offset: 0.0
+    park_az: 180.0
+
 
 Dependencies
 ------------
