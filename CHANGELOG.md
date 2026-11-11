@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Entries for releases before this file existed were generated from commit subjects.
 
+## [Unreleased]
+
+- Add `az_offset` (default 180.0, South-zero as before) to AlpacaTelescope and AlpacaDome; set it to 0.0 for drivers that report ASCOM North-zero azimuth
+- Dome now slews to `park_az` (converted with `az_offset`) when closing, instead of device azimuth 0 (same position with the defaults)
+- Wrap azimuth and RA into [0, 360) and handle the 0/360 boundary in dome distance checks
+- Focuser: add `move_timeout` (default 60 s), use `IsMoving` for completion detection (#53)
+
+## [2.0.5] - 2026-11-10
+
+- CI: run checks on pull requests
+- Dependency updates (pyasn1, certifi, filelock, virtualenv, pillow, black, aiohttp, multidict)
+
+## [2.0.4] - 2026-10-15
+
+- Fix focuser unit conversion from mm to micron steps (#52)
+- Declare IPointingRaDec and IPointingAltAz interfaces in AlpacaTelescope (#51)
+- Forward telescope FITS namespace context to the base class
+- Dependency updates
+
+## [2.0.3] - 2026-10-04
+
+- Put email on the LICENSE copyright line so GitHub detects MIT
+- Dependency updates (virtualenv, urllib3)
+
+## [2.0.2] - 2026-10-04
+
+- Add CONTRIBUTING.md and CHANGELOG.md, add readme and project URLs to pyproject.toml
+- Dependency updates
+
 ## [2.0.1] - 2026-09-03
 
 - Add DOMESHUT FITS header; adopt FocuserHeaderMixin for FOCOFF (#872)

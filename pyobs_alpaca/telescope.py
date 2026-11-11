@@ -35,12 +35,20 @@ class AlpacaTelescope(
 ):
     __module__ = "pyobs_alpaca"
 
-    def __init__(self, settle_time: float = 3.0, park_position: tuple[float, float] = (180.0, 15.0), **kwargs: Any):
+    def __init__(
+        self,
+        settle_time: float = 3.0,
+        park_position: tuple[float, float] = (180.0, 15.0),
+        az_offset: float = 180.0,
+        **kwargs: Any,
+    ):
         """Initializes a new ASCOM Alpaca telescope.
 
         Args:
             settle_time: Time in seconds to wait after slew before finishing.
             park_position: Alt/Az park position.
+            az_offset: Azimuth offset in degrees added when converting from device azimuth to North-zero azimuth.
+                Default 180 (South-zero, ASA Autoslew/Baader), use 0 for ASCOM North-zero drivers.
         """
         super().__init__(
             motion_status_interfaces=["ITelescope"],
@@ -55,6 +63,7 @@ class AlpacaTelescope(
         # variables
         self._settle_time = settle_time
         self._park_position = park_position
+        self._az_offset = az_offset
 
         # offsets in ra/dec
         self._offset_ra = 0.0
@@ -102,19 +111,17 @@ class AlpacaTelescope(
             try:
                 ra_raw = await self._device.get("RightAscension")
                 dec = await self._device.get("Declination")
-                ra_off = self._offset_ra / np.cos(np.radians(dec))
-                ra = float(ra_raw * 15 - ra_off)
+                ra_off = 0.0 if self._offset_ra == 0.0 else float(self._offset_ra / np.cos(np.radians(dec)))
+                ra = float(ra_raw * 15.0 - ra_off) % 360.0
                 dec = float(dec - self._offset_dec)
 
                 self._cached_ra = ra
                 self._cached_dec = dec
                 await self.comm.set_state(IPointingRaDec, RaDecState(ra=ra, dec=dec))
 
-                az_raw = await self._device.get("Azimuth") + 180
-                if az_raw > 360:
-                    az_raw -= 360
-                alt = await self._device.get("Altitude")
-                await self.comm.set_state(IPointingAltAz, AltAzState(alt=alt, az=az_raw))
+                az = float(await self._device.get("Azimuth") + self._az_offset) % 360.0
+                alt = float(await self._device.get("Altitude"))
+                await self.comm.set_state(IPointingAltAz, AltAzState(alt=alt, az=az))
             except ConnectionError:
                 self._cached_ra = None
                 self._cached_dec = None
@@ -190,7 +197,11 @@ class AlpacaTelescope(
 
         try:
             await self._device.put("Tracking", Tracking=False)
-            await self._device.put("SlewToAltAzAsync", Azimuth=az, Altitude=alt)
+            await self._device.put(
+                "SlewToAltAzAsync",
+                Azimuth=float(az - self._az_offset) % 360.0,
+                Altitude=alt,
+            )
 
             while await self._device.get("Slewing"):
                 if await event_wait(abort_event, 1):
@@ -211,7 +222,7 @@ class AlpacaTelescope(
 
         try:
             await self._device.put("Tracking", Tracking=True)
-            await self._device.put("SlewToCoordinatesAsync", RightAscension=ra / 15.0, Declination=dec)
+            await self._device.put("SlewToCoordinatesAsync", RightAscension=(ra % 360.0) / 15.0, Declination=dec)
 
             while await self._device.get("Slewing"):
                 if await event_wait(abort_event, 1):
@@ -251,8 +262,8 @@ class AlpacaTelescope(
             # get current coordinates from device (without old offsets)
             ra_raw = await self._device.get("RightAscension")
             dec_raw = await self._device.get("Declination")
-            old_ra_off = self._offset_ra / np.cos(np.radians(dec_raw))
-            ra = float(ra_raw * 15 - old_ra_off)
+            old_ra_off = 0.0 if self._offset_ra == 0.0 else float(self._offset_ra / np.cos(np.radians(dec_raw)))
+            ra = float(ra_raw * 15.0 - old_ra_off)
             dec = float(dec_raw - self._offset_dec)
 
             # store new offsets
@@ -260,7 +271,8 @@ class AlpacaTelescope(
             self._offset_dec = ddec
 
             # apply new offsets
-            ra += float(self._offset_ra / np.cos(np.radians(dec)))
+            new_ra_off = 0.0 if self._offset_ra == 0.0 else float(self._offset_ra / np.cos(np.radians(dec)))
+            ra = (ra + new_ra_off) % 360.0
             dec += float(self._offset_dec)
 
             await self._device.put("Tracking", Tracking=True)
@@ -300,7 +312,11 @@ class AlpacaTelescope(
         """Synchronize telescope on current target using current offsets."""
         if self._cached_ra is None or self._cached_dec is None:
             raise exc.MoveError("No position available for sync.")
-        await self._device.put("SyncToCoordinates", RightAscension=self._cached_ra / 15.0, Declination=self._cached_dec)
+        await self._device.put(
+            "SyncToCoordinates",
+            RightAscension=(self._cached_ra % 360.0) / 15.0,
+            Declination=self._cached_dec,
+        )
 
     async def get_fits_header_before(
         self, namespaces: list[str] | None = None, **kwargs: Any
