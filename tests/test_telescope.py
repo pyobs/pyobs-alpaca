@@ -15,7 +15,7 @@ _TELESCOPE_ARGS: dict[str, Any] = dict(server="localhost", port=11111, device_ty
 async def test_update_position_preserves_north_zero_azimuth_and_wraps_modulo(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_update_position publishes North-zero ASCOM Azimuth directly by default and supports az_offset."""
+    """_update_position publishes North-zero ASCOM Azimuth directly with az_offset=0.0 and supports other offsets."""
     telescope = AlpacaTelescope(az_offset=0.0, **_TELESCOPE_ARGS)
     telescope.comm.set_state = AsyncMock()  # type: ignore[method-assign]
 

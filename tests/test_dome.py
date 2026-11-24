@@ -13,7 +13,7 @@ _DOME_ARGS: dict[str, Any] = dict(server="localhost", port=11111, device_type="d
 
 @pytest.mark.asyncio
 async def test_dome_default_north_zero_azimuth_and_modulo(monkeypatch: pytest.MonkeyPatch) -> None:
-    """AlpacaDome uses North-zero azimuth (az_offset=0.0) by default and wraps 360° -> 0°."""
+    """AlpacaDome with az_offset=0.0 (ASCOM North-zero driver) passes azimuth through and wraps 360° -> 0°."""
     dome = AlpacaDome(az_offset=0.0, **_DOME_ARGS)
     dome.comm.set_state = AsyncMock()  # type: ignore[method-assign]
 
